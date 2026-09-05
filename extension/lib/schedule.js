@@ -254,9 +254,10 @@ export const uid = () => Math.random().toString(36).slice(2, 9);
 // `guess` (the technique you reached for) and `knew` (minutes until you knew
 // the move) are the blind rep's real payload; both are optional, because the
 // extension logs from a page that never asked.
-export function newProblem({ name, url, category, difficulty, insight, outcome, minutes, guess, knew }) {
+export function newProblem({ name, url, category, difficulty, insight, outcome, minutes, guess, knew, budget }) {
   return {
     id: uid(), name, url, category, difficulty, insight,
+    ...(budget ? { budget } : {}),
     history: [outcome], times: [minutes ?? null], log: [Date.now()],
     guesses: [guess ?? null], knew: [knew ?? null],
     added: Date.now(),

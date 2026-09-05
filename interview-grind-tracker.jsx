@@ -290,6 +290,18 @@ export default function GrindTracker() {
     setEditing(null);
   }
 
+  // The pace budget is the one descriptive field editable mid-rep, because
+  // that is when you find out the tier estimate is wrong for this problem.
+  function setProblemBudget(id, budget) {
+    commit(budget ? `Budget set to ${budget} minutes.` : "Budget back to the tier estimate.",
+      problems.map((p) => {
+        if (p.id !== id) return p;
+        const next = { ...p };
+        if (budget) next.budget = budget; else delete next.budget;
+        return next;
+      }));
+  }
+
   // One more attempt on an already-tracked problem (a re-solve serving an
   // exhausted pool, a leech rewrite, or a voluntary rep from the log).
   function recordAttempt(id, outcome, minutes, extra = {}) {
@@ -306,15 +318,15 @@ export default function GrindTracker() {
   // (logged from the extension popup in the same session), append instead — a
   // second copy would split the evidence.
   function recordFresh(entry, outcome, minutes, extra = {}) {
-    const { guess = null, knew = null, insight = "" } = extra;
+    const { guess = null, knew = null, insight = "", budget = null } = extra;
     const existing = findExisting(problems, entry);
     commit(`Logged ${entry.name}.`, existing
       ? problems.map((p) => (p.id === existing.id
-        ? logAttempt(p, outcome, minutes, { guess, knew })
+        ? { ...logAttempt(p, outcome, minutes, { guess, knew }), ...(budget ? { budget } : {}) }
         : p))
       : [newProblem({
           name: entry.name, url: entry.url, category: entry.category,
-          difficulty: entry.difficulty, insight, outcome, minutes, guess, knew,
+          difficulty: entry.difficulty, insight, outcome, minutes, guess, knew, budget,
         }), ...problems]);
   }
 
@@ -444,7 +456,7 @@ export default function GrindTracker() {
           </Notice>
         ) : tab === "today" ? (
           <TodayView techs={techs} problems={problems} delays={delays} ready={ready} budget={budget}
-            pickBudget={pickBudget} focused={focused} setFocused={setFocused}
+            pickBudget={pickBudget} focused={focused} setFocused={setFocused} setProblemBudget={setProblemBudget}
             recordFresh={recordFresh} recordAttempt={recordAttempt} delayTech={delayTech} />
         ) : tab === "techniques" ? (
           <TechniquesView techs={techs} delays={delays} />
@@ -551,7 +563,7 @@ function Head({ children, count }) {
 // column at the rule, the problem is written beside it, and the technique is
 // nowhere, because choosing the move from the problem alone is the rep.
 export function TodayView({ techs, problems, delays, ready, budget, pickBudget,
-  focused, setFocused, recordFresh, recordAttempt, delayTech }) {
+  focused, setFocused, recordFresh, recordAttempt, delayTech, setProblemBudget }) {
   // Reroll counters, per technique. Session-only state: the base pick is
   // day-seeded, so a reload simply returns to it.
   const [nonces, setNonces] = useState({});
@@ -560,13 +572,18 @@ export function TodayView({ techs, problems, delays, ready, budget, pickBudget,
   // What a technique's tier was at the moment its attempt was logged, so the
   // reveal can say the tier moved. In memory, this session only.
   const [logged, setLogged] = useState({});
+  // A budget typed on the rep screen for a problem that isn't tracked yet; it
+  // travels with the first attempt. Tracked problems are written straight away.
+  const [pending, setPending] = useState({});
+  // The attempt just logged, shown on its own screen before Today comes back.
+  const [done, setDone] = useState(null);
 
   const plan = useMemo(() => buildPlan(techs, budget, delays, nonces), [techs, budget, delays, nonces]);
   const items = useMemo(() => (plan.items ?? []).filter((i) => i?.serve?.problem), [plan]);
   const idx = items.findIndex((i) => i.tech.key === openKey);
   const open = idx >= 0 ? items[idx] : null;
 
-  useEffect(() => { setFocused(!!open); }, [open, setFocused]);
+  useEffect(() => { setFocused(!!open || !!done); }, [open, done, setFocused]);
 
   // Everything logged today, whatever logged it — this page, another tab, the
   // extension. "Logged today" is the day's evidence, not this session's.
@@ -589,15 +606,36 @@ export function TodayView({ techs, problems, delays, ready, budget, pickBudget,
 
   const reroll = (key) => setNonces((n) => ({ ...n, [key]: (n[key] ?? 0) + 1 }));
 
+  const isTracked = (item) => item.serve.mode === "resolve" || item.serve.mode === "study";
+
   function record(item, outcome, minutes, guess, knew) {
-    const t = item.tech;
+    const t = item.tech, p = item.serve.problem;
+    const budget = pending[t.key] ?? null;
     setLogged((m) => ({ ...m, [t.key]: { tier: t.tier ?? 0, why: item.why, label: t.label } }));
-    if (item.serve.mode === "resolve" || item.serve.mode === "study")
-      recordAttempt(item.serve.problem.id, outcome, minutes, { guess, knew });
+    setDone({
+      key: t.key, tier: t.tier ?? 0, why: item.why, name: p.name,
+      id: isTracked(item) ? p.id : null, entry: { url: p.url, name: p.name },
+      outcome, minutes, guess, knew, budget: budget ?? item.est,
+    });
+    if (isTracked(item))
+      recordAttempt(p.id, outcome, minutes, { guess, knew });
     else
-      recordFresh(item.serve.problem, outcome, minutes, { guess, knew });
+      recordFresh(p, outcome, minutes, { guess, knew, budget });
     setOpenKey(null);
     setPostponing(false);
+  }
+
+  function changeBudget(item, n) {
+    if (isTracked(item)) setProblemBudget(item.serve.problem.id, n);
+    else setPending((m) => ({ ...m, [item.tech.key]: n }));
+  }
+
+  if (done) {
+    return (
+      <RepDone done={done} problems={problems} techs={techs} remaining={items.length}
+        onNext={() => { setDone(null); setOpenKey(items[0].tech.key); }}
+        onBack={() => setDone(null)} />
+    );
   }
 
   if (open) {
@@ -605,6 +643,8 @@ export function TodayView({ techs, problems, delays, ready, budget, pickBudget,
       <RepScreen key={open.tech.key + ":" + (nonces[open.tech.key] ?? 0)}
         item={open} position={idx} total={items.length} ready={ready}
         postponing={postponing} setPostponing={setPostponing}
+        ownBudget={pending[open.tech.key] ?? open.serve.problem.budget ?? null}
+        onBudget={(n) => changeBudget(open, n)}
         onBack={() => { setOpenKey(null); setPostponing(false); }}
         onReroll={() => reroll(open.tech.key)}
         onPostpone={(days) => { delayTech(open.tech.key, days); setOpenKey(null); setPostponing(false); }}
@@ -696,9 +736,19 @@ function Entry({ item, onOpen }) {
 // it can have gone. A blind item's technique appears nowhere in here — not in
 // the copy, not in a title, not in an aria-label.
 function RepScreen({ item, position, total, ready, postponing, setPostponing,
-  onBack, onReroll, onPostpone, onRecord }) {
-  const { tech, serve, est } = item;
+  ownBudget, onBudget, onBack, onReroll, onPostpone, onRecord }) {
+  const { tech, serve } = item;
   const p = serve.problem;
+  // The budget is editable right here: the tier estimate is a guess about the
+  // general solver, and mid-rep is exactly when you learn it's wrong for this
+  // one. The track follows what's typed; blur writes it.
+  const tierEst = BUDGET[p.difficulty] ?? 30;
+  const [budgetText, setBudgetText] = useState(ownBudget != null ? String(ownBudget) : "");
+  const est = (parseInt(budgetText, 10) || null) ?? tierEst;
+  const saveBudget = () => {
+    const n = parseInt(budgetText, 10) || null;
+    if (n !== (ownBudget ?? null)) onBudget(n);
+  };
   const href = safeUrl(p.url);
   const src = sourceOf(p);
   const [secs, setSecs] = useState(0);
@@ -730,7 +780,14 @@ function RepScreen({ item, position, total, ready, postponing, setPostponing,
       <h1 className="repName">{p.name}</h1>
       <p className="repMeta">
         {(p.difficulty || "medium").toLowerCase()}, rep {position + 1} of {total},
-        {" "}budget <span className="fig">{est}</span> minutes
+        {" "}budget{" "}
+        <input className="budgetIn fig" inputMode="numeric" aria-label="Pace budget in minutes"
+          value={budgetText} placeholder={String(tierEst)}
+          onChange={(e) => setBudgetText(e.target.value.replace(/\D/g, ""))}
+          onBlur={saveBudget}
+          onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
+        {" "}minutes
+        {est !== tierEst && <>, tier estimate <span className="fig">{tierEst}</span></>}
       </p>
 
       {href && (
@@ -812,6 +869,54 @@ function RepScreen({ item, position, total, ready, postponing, setPostponing,
           )
         }
         onRecord={onRecord} />
+    </div>
+  );
+}
+
+// What just happened, on the rep's own screen: the verdict on the guess, the
+// time against the budget, and whether the technique moved. Today is one tap
+// away, but it shouldn't be where you first learn what the move was.
+function RepDone({ done, problems, techs, remaining, onNext, onBack }) {
+  const p = done.id ? problems.find((x) => x.id === done.id) : findExisting(problems, done.entry);
+  const tech = techs.find((t) => t.key === done.key);
+  const budget = p ? budgetOf(p) : done.budget;
+  const over = done.minutes != null && done.minutes > budget;
+  const moved = tech && tech.tier != null && tech.tier !== done.tier;
+  return (
+    <div className="rep">
+      <button className="back" onClick={onBack} aria-label="Back to today">
+        <Chevron dir="left" />Today
+      </button>
+
+      <h1 className="repName">{p?.name ?? done.name}</h1>
+      <p className="repMeta">
+        Logged as {OUTCOMES[done.outcome].label.toLowerCase()}
+        {done.minutes != null
+          ? <>, <span className="fig">{done.minutes}</span> minutes against a <span className="fig">{budget}</span> minute budget</>
+          : null}.
+      </p>
+
+      <p className="repSay">
+        {p && <Verdict p={p} guess={done.guess} knew={done.knew} />}
+        {over && done.outcome === "cold" && "Unaided and optimal, but over pace, so it does not count toward the climb. "}
+        {done.why && `Served because: ${done.why}.`}
+      </p>
+
+      {tech && tech.tier != null && (
+        <div className="movedRow doneRow">
+          <Grade tier={tech.tier} />
+          <span className="meta">
+            {cap(tech.label)} {moved ? "now serves" : "still serves"} {tierWord(tech.tier)} problems
+          </span>
+        </div>
+      )}
+
+      <div className="repActions doneActions">
+        {remaining > 0
+          ? <button className="btn btnStrong" onClick={onNext}>Next rep</button>
+          : <span className="meta">That was the last rep that fit today.</span>}
+        <button className="btn btnBare" onClick={onBack}>Back to today</button>
+      </div>
     </div>
   );
 }
@@ -1819,6 +1924,12 @@ button, input, select, textarea { font-family: inherit; }
 .repName { font-size: 26px; line-height: 1.15; font-weight: 700; letter-spacing: -0.02em;
   margin: 4px 16px 0; }
 .repMeta { font-size: 13.5px; color: var(--ink-3); margin: 8px 16px 0; }
+.budgetIn { width: 3.2ch; box-sizing: content-box; text-align: center; font: inherit; font-size: 14px;
+  color: var(--ink); background: transparent; border: 0; border-radius: 0;
+  border-bottom: 1px solid var(--rule-ink); padding: 3px 3px; margin: 0; -webkit-appearance: none; }
+.budgetIn:focus { outline: none; border-bottom-color: var(--ink); }
+.doneRow { margin: 18px 16px 0; }
+.doneActions { padding: 18px 11px 0; }
 .btnOpen { width: calc(100% - 32px); margin: 15px 16px 0; min-height: 52px; padding: 0 15px;
   justify-content: flex-start; }
 .repSay { font-size: 13.5px; line-height: 1.55; color: var(--ink-2); margin: 16px 16px 0;
