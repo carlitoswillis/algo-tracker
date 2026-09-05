@@ -1,0 +1,18 @@
+.env
+node_modules
+dist
+
+# Your practice data — the log and the problem catalog. See lib/data-dir.js.
+data
+grind-tracker-state.json
+grind-tracker-state.snapshots.json
+
+# Local scratch: captures and generated docs, not part of the project.
+questions-source
+openwiki
+
+# Generated from the catalog by `npm run ext:sync`.
+extension/lib/problem-data.js
+
+# Written by the demo when you log a rep against the sample data.
+examples/state.snapshots.json

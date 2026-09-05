@@ -1,0 +1,526 @@
+{
+  "rev": 41,
+  "updatedAt": 1788667920000,
+  "problems": [
+    {
+      "id": "ex01",
+      "name": "Pair sum in a ledger",
+      "url": "https://example.com/problems/pair-sum-in-a-ledger",
+      "category": "Hashmaps",
+      "difficulty": "Easy",
+      "insight": "the map is the second pass — store the complement, not the value",
+      "history": [
+        "hints",
+        "cold",
+        "cold"
+      ],
+      "times": [
+        22,
+        11,
+        9
+      ],
+      "guesses": [
+        "complement lookup",
+        "complement lookup",
+        "complement lookup"
+      ],
+      "knew": [
+        9,
+        3,
+        2
+      ],
+      "log": [
+        1786590000000,
+        1787198400000,
+        1788145200000
+      ],
+      "added": 1786590000000
+    },
+    {
+      "id": "ex02",
+      "name": "Group the anagrammed labels",
+      "url": "https://example.com/problems/group-the-anagrammed-labels",
+      "category": "Hashmaps",
+      "difficulty": "Easy",
+      "insight": "sorted letters as the key; counting vector when the alphabet is small",
+      "history": [
+        "cold"
+      ],
+      "times": [
+        13
+      ],
+      "guesses": [
+        "complement lookup"
+      ],
+      "knew": [
+        6
+      ],
+      "log": [
+        1787544000000
+      ],
+      "added": 1787544000000
+    },
+    {
+      "id": "ex03",
+      "name": "Warehouse aisle sweep",
+      "url": "https://example.com/problems/warehouse-aisle-sweep",
+      "category": "Two Pointers",
+      "difficulty": "Easy",
+      "insight": "",
+      "history": [
+        "cold",
+        "cold"
+      ],
+      "times": [
+        12,
+        10
+      ],
+      "guesses": [
+        "converging pointers",
+        "converging pointers"
+      ],
+      "knew": [
+        4,
+        2
+      ],
+      "log": [
+        1786759200000,
+        1787886000000
+      ],
+      "added": 1786759200000
+    },
+    {
+      "id": "ex04",
+      "name": "Sorted squares of readings",
+      "url": "https://example.com/problems/sorted-squares-of-readings",
+      "category": "Two Pointers",
+      "difficulty": "Easy",
+      "insight": "fill from the back — the largest square is at one end or the other",
+      "history": [
+        "subopt"
+      ],
+      "times": [
+        18
+      ],
+      "guesses": [
+        "converging pointers"
+      ],
+      "knew": [
+        7
+      ],
+      "log": [
+        1787022000000
+      ],
+      "added": 1787022000000
+    },
+    {
+      "id": "ex05",
+      "name": "Longest quiet window",
+      "url": "https://example.com/problems/longest-quiet-window",
+      "category": "Sliding Window",
+      "difficulty": "Medium",
+      "insight": "shrink on the invariant, not on the count — I keep shrinking too early",
+      "history": [
+        "failed",
+        "hints",
+        "failed"
+      ],
+      "times": [
+        42,
+        35,
+        40
+      ],
+      "guesses": [
+        "two pointers",
+        "sliding window",
+        "sliding window"
+      ],
+      "knew": [
+        null,
+        18,
+        null
+      ],
+      "log": [
+        1786420800000,
+        1787367600000,
+        1788321600000
+      ],
+      "added": 1786420800000
+    },
+    {
+      "id": "ex06",
+      "name": "Smallest covering shift",
+      "url": "https://example.com/problems/smallest-covering-shift",
+      "category": "Sliding Window",
+      "difficulty": "Hard",
+      "insight": "need the have/need counter, otherwise the check inside the loop is O(k)",
+      "history": [
+        "failed"
+      ],
+      "times": [
+        45
+      ],
+      "guesses": [
+        "sliding window"
+      ],
+      "knew": [
+        26
+      ],
+      "log": [
+        1787720400000
+      ],
+      "added": 1787720400000
+    },
+    {
+      "id": "ex07",
+      "name": "Quiet stretch of the river",
+      "url": "https://example.com/problems/quiet-stretch-of-the-river",
+      "category": "Sliding Window",
+      "difficulty": "Medium",
+      "insight": "",
+      "history": [
+        "hints"
+      ],
+      "times": [
+        31
+      ],
+      "guesses": [
+        "sliding window"
+      ],
+      "knew": [
+        14
+      ],
+      "log": [
+        1788490800000
+      ],
+      "added": 1788490800000
+    },
+    {
+      "id": "ex08",
+      "name": "Seat the guests",
+      "url": "https://example.com/problems/seat-the-guests",
+      "category": "Recursion / Backtracking",
+      "difficulty": "Hard",
+      "insight": "the pruning has to happen before the recursive call, not inside it",
+      "history": [
+        "failed",
+        "failed"
+      ],
+      "times": [
+        50,
+        48
+      ],
+      "guesses": [
+        "constraint backtracking",
+        "constraint backtracking"
+      ],
+      "knew": [
+        null,
+        30
+      ],
+      "log": [
+        1786852800000,
+        1787630400000
+      ],
+      "added": 1786852800000
+    },
+    {
+      "id": "ex09",
+      "name": "Queens on the loading grid",
+      "url": "https://example.com/problems/queens-on-the-loading-grid",
+      "category": "Recursion / Backtracking",
+      "difficulty": "Hard",
+      "insight": "",
+      "history": [
+        "failed"
+      ],
+      "times": [
+        47
+      ],
+      "guesses": [
+        "grid backtracking"
+      ],
+      "knew": [
+        null
+      ],
+      "log": [
+        1788408000000
+      ],
+      "added": 1788408000000
+    },
+    {
+      "id": "ex10",
+      "name": "Balanced bracket audit",
+      "url": "https://example.com/problems/balanced-bracket-audit",
+      "category": "Stacks & Queues",
+      "difficulty": "Easy",
+      "insight": "",
+      "history": [
+        "cold",
+        "cold"
+      ],
+      "times": [
+        8,
+        6
+      ],
+      "guesses": [
+        "matching with stack",
+        "matching with stack"
+      ],
+      "knew": [
+        2,
+        1
+      ],
+      "log": [
+        1786500000000,
+        1787799600000
+      ],
+      "added": 1786500000000
+    },
+    {
+      "id": "ex11",
+      "name": "Stack of falling prices",
+      "url": "https://example.com/problems/stack-of-falling-prices",
+      "category": "Stacks & Queues",
+      "difficulty": "Medium",
+      "insight": "pop while the new value dominates; the popped index is what you were waiting for",
+      "history": [
+        "cold"
+      ],
+      "times": [
+        21
+      ],
+      "guesses": [
+        "monotonic stack"
+      ],
+      "knew": [
+        8
+      ],
+      "log": [
+        1788235200000
+      ],
+      "added": 1788235200000
+    },
+    {
+      "id": "ex12",
+      "name": "Shortest ferry hop",
+      "url": "https://example.com/problems/shortest-ferry-hop",
+      "category": "Graphs (BFS/DFS)",
+      "difficulty": "Medium",
+      "insight": "shortest hops on an unweighted graph is BFS, every time",
+      "history": [
+        "subopt",
+        "cold"
+      ],
+      "times": [
+        34,
+        24
+      ],
+      "guesses": [
+        "DFS traversal",
+        "BFS traversal"
+      ],
+      "knew": [
+        12,
+        5
+      ],
+      "log": [
+        1786935600000,
+        1788062400000
+      ],
+      "added": 1786935600000
+    },
+    {
+      "id": "ex13",
+      "name": "Count the safe islands",
+      "url": "https://example.com/problems/count-the-safe-islands",
+      "category": "Graphs (BFS/DFS)",
+      "difficulty": "Medium",
+      "insight": "",
+      "history": [
+        "cold"
+      ],
+      "times": [
+        19
+      ],
+      "guesses": [
+        "flood fill"
+      ],
+      "knew": [
+        4
+      ],
+      "log": [
+        1787281200000
+      ],
+      "added": 1787281200000
+    },
+    {
+      "id": "ex14",
+      "name": "Ancestor of two depots",
+      "url": "https://example.com/problems/ancestor-of-two-depots",
+      "category": "Trees & BST",
+      "difficulty": "Medium",
+      "insight": "return the node itself when either side matches; the split point is the answer",
+      "history": [
+        "hints"
+      ],
+      "times": [
+        33
+      ],
+      "guesses": [
+        "tree recursion"
+      ],
+      "knew": [
+        15
+      ],
+      "log": [
+        1786680000000
+      ],
+      "added": 1786680000000
+    },
+    {
+      "id": "ex15",
+      "name": "Kth busiest terminal",
+      "url": "https://example.com/problems/kth-busiest-terminal",
+      "category": "Heaps",
+      "difficulty": "Medium",
+      "insight": "a min-heap of size k, not a max-heap of size n",
+      "history": [
+        "cold"
+      ],
+      "times": [
+        22
+      ],
+      "guesses": [
+        "top-k heap"
+      ],
+      "knew": [
+        6
+      ],
+      "log": [
+        1787108400000
+      ],
+      "added": 1787108400000
+    },
+    {
+      "id": "ex16",
+      "name": "Tile the corridor",
+      "url": "https://example.com/problems/tile-the-corridor",
+      "category": "Dynamic Programming",
+      "difficulty": "Medium",
+      "insight": "two rolling variables, not a table",
+      "history": [
+        "subopt"
+      ],
+      "times": [
+        29
+      ],
+      "guesses": [
+        "1-D sequence DP"
+      ],
+      "knew": [
+        11
+      ],
+      "log": [
+        1787457600000
+      ],
+      "added": 1787457600000
+    },
+    {
+      "id": "ex17",
+      "name": "Coin drawer for change",
+      "url": "https://example.com/problems/coin-drawer-for-change",
+      "category": "Dynamic Programming",
+      "difficulty": "Medium",
+      "insight": "coins outside, amounts inside — the other order counts permutations",
+      "history": [
+        "hints"
+      ],
+      "times": [
+        36
+      ],
+      "guesses": [
+        "unbounded knapsack DP"
+      ],
+      "knew": [
+        19
+      ],
+      "log": [
+        1787976000000
+      ],
+      "added": 1787976000000
+    },
+    {
+      "id": "ex18",
+      "name": "Rotate the duty roster",
+      "url": "https://example.com/problems/rotate-the-duty-roster",
+      "category": "Arrays & Strings",
+      "difficulty": "Medium",
+      "insight": "reverse all, then reverse each part",
+      "history": [
+        "cold"
+      ],
+      "times": [
+        14
+      ],
+      "guesses": [
+        "in-place reversal"
+      ],
+      "knew": [
+        4
+      ],
+      "log": [
+        1788577200000
+      ],
+      "added": 1788577200000
+    },
+    {
+      "id": "ex19",
+      "name": "Reverse the relay chain",
+      "url": "https://example.com/problems/reverse-the-relay-chain",
+      "category": "Linked Lists",
+      "difficulty": "Easy",
+      "insight": "",
+      "history": [
+        "cold"
+      ],
+      "times": [
+        7
+      ],
+      "guesses": [
+        "pointer rewiring"
+      ],
+      "knew": [
+        2
+      ],
+      "log": [
+        1788663600000
+      ],
+      "added": 1788663600000
+    },
+    {
+      "id": "ex20",
+      "name": "Two-pass prefix audit",
+      "url": "https://example.com/problems/two-pass-prefix-audit",
+      "category": "Arrays & Strings",
+      "difficulty": "Medium",
+      "insight": "one pass forward, one back — no division, no special case for the zero",
+      "history": [
+        "subopt"
+      ],
+      "times": [
+        26
+      ],
+      "guesses": [
+        "prefix/suffix accumulation"
+      ],
+      "knew": [
+        9
+      ],
+      "log": [
+        1788667200000
+      ],
+      "added": 1788667200000
+    }
+  ]
+}

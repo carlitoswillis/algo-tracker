@@ -1,0 +1,134 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    /* Matches the Algo Tracker console: ink, amber accent, teal for a clean solve. */
+    body {
+      width: 328px; margin: 0; padding: 14px;
+      background: #0E1116; color: #B8BFC9;
+      font: 13px/1.45 "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    }
+    .mark {
+      font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+      color: #E8A33D; margin-bottom: 10px;
+    }
+    h1 {
+      font: 600 16px/1.3 -apple-system, "Segoe UI", sans-serif;
+      color: #E8EAED; margin: 0 0 4px;
+    }
+    a { color: #4FB8A8; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    label {
+      display: block; margin-bottom: 8px;
+      font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #5C6572;
+    }
+    input, select {
+      width: 100%; box-sizing: border-box; margin-top: 4px;
+      background: #0E1116; color: #E8EAED;
+      border: 1px solid #2A313C; border-radius: 4px;
+      padding: 7px 9px; font-size: 13px; font-family: inherit;
+    }
+    input:focus, select:focus { outline: none; border-color: #4FB8A8; }
+    .row { display: flex; gap: 8px; }
+    .row > * { flex: 1; }
+    .meta { font-size: 10.5px; color: #5C6572; margin: 2px 0 10px; word-break: break-all; }
+    .state {
+      background: #151A21; border: 1px solid #1E242D; border-left: 3px solid #4FB8A8;
+      border-radius: 5px; padding: 8px 10px; margin-bottom: 10px; font-size: 11.5px;
+      line-height: 1.5; color: #B8BFC9;
+    }
+    .state.bonus { border-left-color: #E8A33D; }
+    .state.leech { border-left-color: #E88AAB; }
+    .state b { color: #E8EAED; font-weight: 500; }
+    .outcomes { display: grid; gap: 6px; margin-top: 4px; }
+    .outcomes button {
+      width: 100%; padding: 9px; border: 0; border-radius: 5px;
+      font: 500 12px/1 "IBM Plex Mono", ui-monospace, Menlo, monospace;
+      cursor: pointer; text-align: left; padding-left: 12px;
+    }
+    .outcomes button:hover:not(:disabled) { filter: brightness(1.15); }
+    .outcomes button:disabled { opacity: 0.4; cursor: default; }
+    .o-cold   { background: #16302B; color: #4FB8A8; }
+    .o-subopt { background: #242038; color: #A99BE8; }
+    .o-hints  { background: #33290F; color: #E8A33D; }
+    .o-failed { background: #3A2230; color: #E88AAB; }
+    .ghost {
+      width: 100%; padding: 8px; margin-top: 8px; cursor: pointer;
+      background: none; border: 1px solid #2A313C; border-radius: 5px;
+      color: #B8BFC9; font-family: inherit; font-size: 12px;
+    }
+    .ghost:hover { border-color: #4FB8A8; color: #4FB8A8; }
+    #status { margin-top: 10px; font-size: 12px; color: #8B93A1; min-height: 16px; line-height: 1.5; }
+    #status.ok { color: #4FB8A8; }
+    #status.err { color: #E88AAB; }
+    .hidden { display: none; }
+    .qrow { padding: 7px 0; border-bottom: 1px solid #1E242D; }
+    .qtech { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #5C6572; margin-bottom: 2px; }
+    .qrow a { color: #E8EAED; font-size: 12.5px; }
+    .qrow a:hover { color: #4FB8A8; }
+  </style>
+</head>
+<body>
+  <div class="mark">ALGO TRACKER · LOG THIS SOLVE</div>
+
+  <!-- Shown when the tracker URL or password is missing. -->
+  <div id="setup" class="hidden">
+    <div id="setupMsg" class="meta"></div>
+    <button class="ghost" id="openOptions">Open settings</button>
+  </div>
+
+  <!-- Shown when the active tab isn't a question page. -->
+  <div id="notQuestion" class="hidden">
+    <div class="meta">Open a problem page, then click this icon to log the solve.</div>
+  </div>
+
+  <!-- The ranked session, shown when the tab isn't a problem page. -->
+  <div id="queue" class="hidden">
+    <h1 id="queueTitle"></h1>
+    <div id="queueList"></div>
+  </div>
+
+  <!-- The main form. -->
+  <div id="form" class="hidden">
+    <h1 id="name"></h1>
+    <div class="meta" id="url"></div>
+
+    <div id="state" class="state hidden"></div>
+
+    <!-- Pattern and difficulty are only asked for a problem we haven't seen. -->
+    <div id="newFields" class="hidden">
+      <div class="row">
+        <label>Pattern<select id="category"></select></label>
+      </div>
+      <div class="row">
+        <label>Difficulty
+          <select id="difficulty">
+            <option>Easy</option><option selected>Medium</option><option>Hard</option><option>Very Hard</option>
+          </select>
+        </label>
+        <label>Minutes<input id="minutesNew" inputmode="numeric" placeholder="30" /></label>
+      </div>
+    </div>
+
+    <div id="reviewFields" class="hidden">
+      <label>Minutes<input id="minutes" inputmode="numeric" placeholder="30" /></label>
+    </div>
+
+    <div class="row">
+      <label>Move you reached for<input id="guess" list="technique-labels" placeholder="start typing a technique" /></label>
+      <label>Minutes until you knew<input id="knew" inputmode="numeric" placeholder="3" /></label>
+    </div>
+    <datalist id="technique-labels"></datalist>
+
+    <label>Insight<input id="insight" placeholder="e.g. complement in a set" /></label>
+
+    <label style="margin-bottom:4px">How did it go?</label>
+    <div class="outcomes" id="outcomes"></div>
+  </div>
+
+  <div id="status"></div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

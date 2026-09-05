@@ -1,0 +1,286 @@
+{
+  "version": 1,
+  "linkTemplate": "https://example.com/problems/{slug}",
+  "libraryUrl": "https://example.com/problems",
+  "aliases": [
+    [
+      "Rainfall on the ridge",
+      "Water on the ridge"
+    ],
+    [
+      "Pair sum in a ledger",
+      "Two-sum in a ledger"
+    ]
+  ],
+  "problems": [
+    {
+      "name": "Merge interval schedule",
+      "category": "Greedy",
+      "difficulty": "Medium",
+      "technique": "intervals — sort & sweep",
+      "curated": true
+    },
+    {
+      "name": "Longest quiet window",
+      "category": "Sliding Window",
+      "difficulty": "Medium",
+      "technique": "sliding window",
+      "curated": true
+    },
+    {
+      "name": "Pair sum in a ledger",
+      "category": "Hashmaps",
+      "difficulty": "Easy",
+      "technique": "complement lookup",
+      "curated": true
+    },
+    {
+      "name": "Warehouse aisle sweep",
+      "category": "Two Pointers",
+      "difficulty": "Easy",
+      "technique": "converging pointers",
+      "curated": true
+    },
+    {
+      "name": "Rotate the duty roster",
+      "category": "Arrays & Strings",
+      "difficulty": "Medium",
+      "technique": "in-place reversal",
+      "curated": true
+    },
+    {
+      "name": "Shortest ferry hop",
+      "category": "Graphs (BFS/DFS)",
+      "difficulty": "Medium",
+      "technique": "BFS traversal",
+      "curated": true
+    },
+    {
+      "name": "Balanced bracket audit",
+      "category": "Stacks & Queues",
+      "difficulty": "Easy",
+      "technique": "matching with stack",
+      "curated": true
+    },
+    {
+      "name": "Kth busiest terminal",
+      "category": "Heaps",
+      "difficulty": "Medium",
+      "technique": "top-k heap",
+      "curated": true
+    },
+    {
+      "name": "Split the ration crates",
+      "category": "Binary Search",
+      "difficulty": "Hard",
+      "technique": "binary search on the answer",
+      "curated": true
+    },
+    {
+      "name": "Ancestor of two depots",
+      "category": "Trees & BST",
+      "difficulty": "Medium",
+      "technique": "lowest common ancestor",
+      "curated": true
+    },
+    {
+      "name": "Tile the corridor",
+      "category": "Dynamic Programming",
+      "difficulty": "Medium",
+      "technique": "1-D sequence DP",
+      "curated": true
+    },
+    {
+      "name": "Reverse the relay chain",
+      "category": "Linked Lists",
+      "difficulty": "Easy",
+      "technique": "pointer rewiring",
+      "curated": true
+    },
+    {
+      "name": "Seat the guests",
+      "category": "Recursion / Backtracking",
+      "difficulty": "Hard",
+      "technique": "constraint backtracking",
+      "curated": true
+    },
+    {
+      "name": "Rainfall on the ridge",
+      "category": "Arrays & Strings",
+      "difficulty": "Hard",
+      "technique": "monotonic stack",
+      "curated": true
+    },
+    {
+      "name": "Median of two ledgers",
+      "category": "Binary Search",
+      "difficulty": "Very Hard",
+      "technique": "partition binary search"
+    },
+    {
+      "name": "Cheapest courier route",
+      "category": "Graphs (BFS/DFS)",
+      "difficulty": "Hard",
+      "technique": "shortest path"
+    },
+    {
+      "name": "Group the anagrammed labels",
+      "category": "Hashmaps",
+      "difficulty": "Easy",
+      "technique": "canonical key grouping"
+    },
+    {
+      "name": "Detect the loop in the belt",
+      "category": "Linked Lists",
+      "difficulty": "Medium",
+      "technique": "runner pointers"
+    },
+    {
+      "name": "Longest rising demand run",
+      "category": "Dynamic Programming",
+      "difficulty": "Hard",
+      "technique": "subsequence chain DP"
+    },
+    {
+      "name": "Serialize the shift tree",
+      "category": "Trees & BST",
+      "difficulty": "Hard",
+      "technique": "tree restructuring"
+    },
+    {
+      "name": "Smallest covering shift",
+      "category": "Sliding Window",
+      "difficulty": "Hard",
+      "technique": "sliding window"
+    },
+    {
+      "name": "Stack of falling prices",
+      "category": "Stacks & Queues",
+      "difficulty": "Medium",
+      "technique": "monotonic stack"
+    },
+    {
+      "name": "Merge k delivery logs",
+      "category": "Heaps",
+      "difficulty": "Hard",
+      "technique": "k-way merge"
+    },
+    {
+      "name": "Count the safe islands",
+      "category": "Graphs (BFS/DFS)",
+      "difficulty": "Medium",
+      "technique": "flood fill"
+    },
+    {
+      "name": "Relay ladder of call signs",
+      "category": "Graphs (BFS/DFS)",
+      "difficulty": "Hard",
+      "technique": "BFS traversal"
+    },
+    {
+      "name": "Coin drawer for change",
+      "category": "Dynamic Programming",
+      "difficulty": "Medium",
+      "technique": "unbounded knapsack DP"
+    },
+    {
+      "name": "Two-pass prefix audit",
+      "category": "Arrays & Strings",
+      "difficulty": "Medium",
+      "technique": "prefix/suffix accumulation"
+    },
+    {
+      "name": "Patrols in every order",
+      "category": "Recursion / Backtracking",
+      "difficulty": "Medium",
+      "technique": "permutation backtracking"
+    },
+    {
+      "name": "Nearest shared depot",
+      "category": "Trees & BST",
+      "difficulty": "Medium",
+      "technique": "lowest common ancestor"
+    },
+    {
+      "name": "Second busiest terminal",
+      "category": "Heaps",
+      "difficulty": "Medium",
+      "technique": "top-k heap"
+    },
+    {
+      "name": "Bracket audit at the gate",
+      "category": "Stacks & Queues",
+      "difficulty": "Easy",
+      "technique": "matching with stack"
+    },
+    {
+      "name": "Rotate the loading bay",
+      "category": "Arrays & Strings",
+      "difficulty": "Medium",
+      "technique": "in-place reversal"
+    },
+    {
+      "name": "Quiet stretch of the river",
+      "category": "Sliding Window",
+      "difficulty": "Medium",
+      "technique": "sliding window"
+    },
+    {
+      "name": "Queens on the loading grid",
+      "category": "Recursion / Backtracking",
+      "difficulty": "Hard",
+      "technique": "constraint backtracking"
+    },
+    {
+      "name": "Warehouse batch splitter",
+      "category": "Arrays & Strings",
+      "difficulty": "Easy",
+      "technique": null
+    },
+    {
+      "name": "Signal tower alignment",
+      "category": "Two Pointers",
+      "difficulty": "Medium",
+      "technique": null
+    },
+    {
+      "name": "Orchard yield planner",
+      "category": "Dynamic Programming",
+      "difficulty": "Hard",
+      "technique": null
+    },
+    {
+      "name": "Ledger reconciliation drift",
+      "category": "Hashmaps",
+      "difficulty": "Medium",
+      "technique": null
+    },
+    {
+      "name": "Night shift rota puzzle",
+      "category": "Greedy",
+      "difficulty": "Medium",
+      "technique": null
+    },
+    {
+      "name": "Sorted squares of readings",
+      "category": "Two Pointers",
+      "difficulty": "Easy",
+      "technique": "converging pointers",
+      "seen": true
+    },
+    {
+      "name": "Depth of the org chart",
+      "category": "Trees & BST",
+      "difficulty": "Easy",
+      "technique": "tree recursion",
+      "seen": true
+    },
+    {
+      "name": "First unique badge scan",
+      "category": "Hashmaps",
+      "difficulty": "Easy",
+      "technique": "counting / frequency map",
+      "seen": true
+    }
+  ]
+}

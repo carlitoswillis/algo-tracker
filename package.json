@@ -1,0 +1,25 @@
+{
+  "name": "algo-tracker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --open",
+    "demo": "ALGO_DATA_DIR=examples vite --port 5199 --strictPort",
+    "build": "npm run ext:sync && vite build",
+    "preview": "vite preview",
+    "start": "node server.mjs",
+    "ext:sync": "node scripts/sync-extension.mjs",
+    "ext:check": "npm run ext:sync && git diff --exit-code --quiet extension/lib || (echo 'extension/lib was stale; it has been resynced' && exit 1)"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.1"
+  }
+}
