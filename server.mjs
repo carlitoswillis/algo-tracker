@@ -57,11 +57,18 @@ function resolveStatic(pathname) {
   return resolved
 }
 
+// Vite hashes everything under assets/, so those can be cached forever; the
+// HTML that names them must always be revalidated, or a rebuild is invisible
+// until the browser feels like checking.
 function serveFile(res, filePath) {
   const ext = path.extname(filePath)
   const contentType = MIME[ext] ?? 'application/octet-stream'
   const body = fs.readFileSync(filePath)
-  res.writeHead(200, { 'Content-Type': contentType })
+  const hashed = filePath.startsWith(path.join(distDir, 'assets') + path.sep)
+  res.writeHead(200, {
+    'Content-Type': contentType,
+    'Cache-Control': hashed ? 'public, max-age=31536000, immutable' : 'no-cache',
+  })
   res.end(body)
 }
 
