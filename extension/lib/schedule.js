@@ -64,6 +64,12 @@ export const OUTCOMES = {
 // plan uses these to size a session.
 export const BUDGET = { Easy: 15, Medium: 30, Hard: 45, "Very Hard": 60 };
 
+// A problem may carry its own `budget` (whole minutes) when the platform's
+// tier estimate is plainly wrong for it. Every pace judgement goes through
+// here so an override is honoured everywhere or nowhere.
+export const budgetOf = (p) =>
+  Number.isInteger(p?.budget) && p.budget > 0 ? p.budget : (BUDGET[p?.difficulty] ?? 30);
+
 // The difficulties a technique can be served at, easiest first. Identical to
 // the catalog's TIERS; a mastery tier IS an index into this.
 export const TIERS_SERVED = ["Easy", "Medium", "Hard", "Very Hard"];
@@ -102,7 +108,7 @@ export const STALE_SCALE = [3, 7, 14, 30];
 //   - anything else (hints, suboptimal, or unaided-but-over-pace): the streak
 //     breaks. Solving it eventually is not solving it in an interview.
 export const atPace = (a) =>
-  a.minutes == null || a.minutes <= (BUDGET[a.problem?.difficulty] ?? 30);
+  a.minutes == null || a.minutes <= budgetOf(a.problem);
 
 export function mastery(attempts) {
   let tier = 0, streak = 0, last = null, lastOutcome = null;
@@ -176,8 +182,8 @@ export const lastTime = (p) => {
   return t.length ? t[t.length - 1] : null;
 };
 export const overPace = (p) => {
-  const t = lastTime(p), b = BUDGET[p.difficulty];
-  return t != null && b != null && t > b;
+  const t = lastTime(p);
+  return t != null && t > budgetOf(p);
 };
 
 // ---------- Problem links ----------

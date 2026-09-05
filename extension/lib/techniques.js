@@ -15,7 +15,7 @@
 import {
   DAY, todayStart, STALE_SCALE,
   mastery, staleDays, form, recognition, strength, isLeech, lapses,
-  findExisting, BUDGET,
+  findExisting, budgetOf,
 } from "./schedule.js";
 import { CATALOG, TIERS, LIBRARY, LIBRARY_URL, entryFor } from "./problems.js";
 
@@ -300,7 +300,7 @@ export function serveFor(tech, nonce = 0) {
 const MAX_NEW = 3; // even a long session shouldn't drown in novelty
 
 const estServe = (serve) =>
-  serve?.problem ? (BUDGET[serve.problem.difficulty] ?? 30) : 30;
+  serve?.problem ? budgetOf(serve.problem) : 30;
 
 // The one-line reason, shown only AFTER the attempt is logged — telling you
 // "you keep failing this" before a blind rep is telling you the answer.

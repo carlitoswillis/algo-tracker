@@ -14,7 +14,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 // — shared verbatim with the Chrome extension. Keep logic there, not here.
 import {
   DAY, todayStart, fmtDate,
-  CATEGORIES, OUTCOMES, BUDGET, TIERS_SERVED, CLIMB_STREAK, LEECH_WINDOW,
+  CATEGORIES, OUTCOMES, BUDGET, budgetOf, TIERS_SERVED, CLIMB_STREAK, LEECH_WINDOW,
   overPace, parseProblemUrl, findExisting,
   newProblem, logAttempt, migrate, isProblem,
 } from "./lib/schedule.js";
@@ -280,7 +280,13 @@ export default function GrindTracker() {
 
   // Edits only touch descriptive fields — never the attempt history.
   function updateProblem(id, data) {
-    commit(`Edited ${data.name}.`, problems.map((p) => (p.id === id ? { ...p, ...data } : p)));
+    commit(`Edited ${data.name}.`, problems.map((p) => {
+      if (p.id !== id) return p;
+      const { budget, ...rest } = data;
+      const next = { ...p, ...rest };
+      if (budget) next.budget = budget; else delete next.budget;
+      return next;
+    }));
     setEditing(null);
   }
 
@@ -858,6 +864,28 @@ function AttemptForm({ onRecord, footer, disabled, compact, autoMinutes = null, 
   );
 }
 
+// Whether a guess names the technique. Labels come from a datalist, but a
+// typed one shouldn't fail on a stray space or a capital.
+const sameMove = (a, b) =>
+  a != null && b != null
+  && a.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() === b.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+// The verdict on a guess, said plainly. `after` is the split, if one was taken.
+function Verdict({ p, guess, knew }) {
+  const id = techniqueOf(p);
+  const after = knew != null ? ` after ${knew} ${plural(knew, "minute")}` : "";
+  if (!id.cataloged) {
+    return (
+      <>{guess ? <>You reached for {guess}{after}. </> : null}
+      This one isn’t in the catalog, so it stands on its own rather than feeding a move. </>
+    );
+  }
+  if (!guess) return <>The move was <span className="named">{id.label}</span>. </>;
+  return sameMove(guess, id.label)
+    ? <><span className="named">Right call.</span> You reached for {id.label}{after}. </>
+    : <><span className="named">Wrong call.</span> You reached for {guess}{after}; it was <span className="named">{id.label}</span>. </>;
+}
+
 // The reveal. Only here does a blind item's technique get named, and the name
 // is set in full ink where everything around it is grey — the emphasis is
 // weight, not a colour that would read as a mark out of ten.
@@ -874,10 +902,7 @@ function LoggedToday({ rows, techs, logged }) {
           const tech = byKey.get(id.key);
           const before = logged[id.key];
           const moved = before && tech && tech.tier != null && before.tier !== tech.tier;
-          const budget = BUDGET[r.p.difficulty];
-          const hit = r.guess && id.cataloged
-            && r.guess.trim().toLowerCase() === id.label.trim().toLowerCase();
-          const after = r.knew != null ? ` after ${r.knew} ${plural(r.knew, "minute")}` : "";
+          const budget = budgetOf(r.p);
 
           return (
             <div key={r.p.id + ":" + r.i} className="rec">
@@ -887,16 +912,7 @@ function LoggedToday({ rows, techs, logged }) {
               <span className="stack">
                 <ProblemName p={r.p} />
                 <span className="meta">
-                  {!id.cataloged ? (
-                    <>{r.guess ? <>You reached for {r.guess}{after}. </> : null}
-                    This one isn’t in the catalog, so it stands on its own rather than feeding a move. </>
-                  ) : hit ? (
-                    <>You reached for <span className="named">{id.label}</span>{after}, and that is the move. </>
-                  ) : r.guess ? (
-                    <>You reached for {r.guess}{after}, it was actually <span className="named">{id.label}</span>. </>
-                  ) : (
-                    <>The move was <span className="named">{id.label}</span>. </>
-                  )}
+                  <Verdict p={r.p} guess={r.guess} knew={r.knew} />
                   {OUTCOMES[r.outcome].label}
                   {r.minutes != null && budget
                     ? <>, against a <span className="fig">{budget}</span> minute budget.</>
@@ -1161,6 +1177,9 @@ const FLAGS = {
 export function LogView({ problems, removeProblem, setEditing, recordAttempt,
   ready, exportJSON, importJSON, openHistory }) {
   const [reviewing, setReviewing] = useState(null);
+  // The last attempt recorded from this screen, so the guess gets its verdict
+  // here rather than only under Today. Session-only.
+  const [revealed, setRevealed] = useState(null); // { id, guess, knew }
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
   const [difficulty, setDifficulty] = useState("all");
@@ -1254,10 +1273,14 @@ export function LogView({ problems, removeProblem, setEditing, recordAttempt,
               {p.insight && <span className="insight">{p.insight}</span>}
               <TimeTrend p={p} />
               <HistoryTimeline p={p} />
+              {revealed?.id === p.id && reviewing !== p.id && (
+                <span className="meta"><Verdict p={p} guess={revealed.guess} knew={revealed.knew} /></span>
+              )}
               {reviewing === p.id && (
                 <AttemptForm compact
                   onRecord={(outcome, minutes, guess, knew) => {
                     recordAttempt(p.id, outcome, minutes, { guess, knew });
+                    setRevealed({ id: p.id, guess, knew });
                     setReviewing(null);
                   }}
                   footer={
@@ -1301,7 +1324,7 @@ function ProblemName({ p }) {
 function TimeTrend({ p }) {
   const times = (p.times || []).filter((t) => t != null);
   if (!times.length) return null;
-  const budget = BUDGET[p.difficulty];
+  const budget = budgetOf(p);
   const slow = overPace(p);
   return (
     <span className="meta">
@@ -1466,6 +1489,7 @@ function ProblemModal({ problem, prefill, problems = [], onClose, onSave }) {
   const [guess, setGuess] = useState("");
   const [knew, setKnew] = useState("");
   const [insight, setInsight] = useState(problem?.insight ?? "");
+  const [budget, setBudget] = useState(problem?.budget ? String(problem.budget) : "");
 
   const valid = name.trim().length > 0;
   const badUrl = url.trim().length > 0 && !parseProblemUrl(url);
@@ -1513,6 +1537,9 @@ function ProblemModal({ problem, prefill, problems = [], onClose, onSave }) {
       url: parseProblemUrl(url)?.url ?? url.trim(),
       category, difficulty, insight: insight.trim(),
     };
+    const ownBudget = parseInt(budget, 10) || null;
+    if (editMode) data.budget = ownBudget;
+    else if (ownBudget) data.budget = ownBudget;
     onSave(editMode ? data : {
       ...data,
       outcome,
@@ -1578,6 +1605,18 @@ function ProblemModal({ problem, prefill, problems = [], onClose, onSave }) {
           </select>
         </label>
       </div>
+
+      <label className="field">
+        <span className="fieldLabel">Pace budget, minutes</span>
+        <input id="pm-budget" className="line fig" inputMode="numeric" value={budget}
+          onChange={(e) => setBudget(e.target.value.replace(/\D/g, ""))}
+          placeholder={String(BUDGET[difficulty] ?? 30)} />
+      </label>
+      <p className="note">
+        {budget && parseInt(budget, 10) > 0
+          ? `Overrides the ${BUDGET[difficulty] ?? 30} minute ${difficulty.toLowerCase()} estimate for this problem only. Clear it to go back.`
+          : `Blank uses the ${difficulty.toLowerCase()} estimate. Set one when the platform's number is plainly wrong for this problem.`}
+      </p>
 
       {!editMode && (
         <>
