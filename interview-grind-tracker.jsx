@@ -14,7 +14,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 // — shared verbatim with the Chrome extension. Keep logic there, not here.
 import {
   DAY, todayStart, fmtDate,
-  CATEGORIES, OUTCOMES, BUDGET, budgetOf, TIERS_SERVED, CLIMB_STREAK, LEECH_WINDOW,
+  CATEGORIES, OUTCOMES, BUDGET, budgetOf, editAttempt, TIERS_SERVED, CLIMB_STREAK, LEECH_WINDOW,
   overPace, parseProblemUrl, findExisting,
   newProblem, logAttempt, migrate, isProblem,
 } from "./lib/schedule.js";
@@ -290,6 +290,12 @@ export default function GrindTracker() {
     setEditing(null);
   }
 
+  // Correcting one attempt after the fact: the timer ran on, or the wrong
+  // outcome got tapped. The technique's tier re-derives from the fixed row.
+  function fixAttempt(id, i, patch) {
+    commit("Corrected the attempt.", problems.map((p) => (p.id === id ? editAttempt(p, i, patch) : p)));
+  }
+
   // The pace budget is the one descriptive field editable mid-rep, because
   // that is when you find out the tier estimate is wrong for this problem.
   function setProblemBudget(id, budget) {
@@ -464,7 +470,7 @@ export default function GrindTracker() {
           <LibraryView problems={problems} ready={ready} openLog={(prefill) => setShowAdd(prefill)} />
         ) : (
           <LogView problems={problems} removeProblem={removeProblem} setEditing={setEditing}
-            recordAttempt={recordAttempt} ready={ready} exportJSON={exportJSON}
+            recordAttempt={recordAttempt} fixAttempt={fixAttempt} ready={ready} exportJSON={exportJSON}
             importJSON={() => fileInput.current?.click()}
             openHistory={canRestore() ? () => setShowHistory(true) : null} />
         )}
@@ -1279,7 +1285,7 @@ const FLAGS = {
 // here is due — this is where the attempts that move a technique live. The
 // recovery controls sit at the foot of this screen, next to the evidence they
 // protect, rather than under every screen in the app.
-export function LogView({ problems, removeProblem, setEditing, recordAttempt,
+export function LogView({ problems, removeProblem, setEditing, recordAttempt, fixAttempt,
   ready, exportJSON, importJSON, openHistory }) {
   const [reviewing, setReviewing] = useState(null);
   // The last attempt recorded from this screen, so the guess gets its verdict
@@ -1377,7 +1383,7 @@ export function LogView({ problems, removeProblem, setEditing, recordAttempt,
               </span>
               {p.insight && <span className="insight">{p.insight}</span>}
               <TimeTrend p={p} />
-              <HistoryTimeline p={p} />
+              <HistoryTimeline p={p} ready={ready} fixAttempt={fixAttempt} />
               {revealed?.id === p.id && reviewing !== p.id && (
                 <span className="meta"><Verdict p={p} guess={revealed.guess} knew={revealed.knew} /></span>
               )}
@@ -1464,19 +1470,25 @@ function attemptRows(p) {
   });
 }
 
-function HistoryTimeline({ p }) {
+function HistoryTimeline({ p, ready, fixAttempt }) {
   const [open, setOpen] = useState(false);
-  if (p.history.length < 2) return null; // a single attempt has no trend to show
+  const [editing, setEditing] = useState(null); // index of the attempt being corrected
   const rows = attemptRows(p);
+  const one = rows.length === 1;
 
   return (
     <div className="timelineWrap">
-      <button className="btn btnSm btnBare" onClick={() => setOpen(!open)} aria-expanded={open}>
-        {open ? "Hide the attempts" : `Show all ${rows.length} attempts`}
+      <button className="btn btnSm btnBare" onClick={() => { setOpen(!open); setEditing(null); }} aria-expanded={open}>
+        {open ? (one ? "Hide the attempt" : "Hide the attempts") : (one ? "Show the attempt" : `Show all ${rows.length} attempts`)}
       </button>
       {open && (
         <div className="timeline">
           {rows.map((r, i) => (
+            editing === i ? (
+              <AttemptEditor key={i} row={r}
+                onSave={(patch) => { fixAttempt(p.id, i, patch); setEditing(null); }}
+                onCancel={() => setEditing(null)} />
+            ) : (
             <div key={i} className="timelineRow">
               <span className="timelineDate fig">{r.at ? fmtDate(r.at) : "unknown"}</span>
               <span className={r.outcome === "failed" ? "miss" : undefined}>
@@ -1488,10 +1500,62 @@ function HistoryTimeline({ p }) {
                 {r.guess && `, reached for ${r.guess}${r.knew != null ? ` in ${r.knew} min` : ""}`}
                 {r.via && `, via ${r.via}`}
               </span>
+              {fixAttempt && (
+                <button className="btn btnSm btnBare timelineEdit" disabled={!ready}
+                  aria-label={`Correct the attempt from ${r.at ? fmtDate(r.at) : "an unknown date"}`}
+                  onClick={() => setEditing(i)}>Correct</button>
+              )}
             </div>
+            )
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// One attempt, opened for correction. The date stays: moving an attempt in
+// time would reorder the evidence, and that is a different, rarer mistake.
+function AttemptEditor({ row, onSave, onCancel }) {
+  const [outcome, setOutcome] = useState(row.outcome);
+  const [minutes, setMinutes] = useState(row.minutes != null ? String(row.minutes) : "");
+  const [knew, setKnew] = useState(row.knew != null ? String(row.knew) : "");
+  const [guess, setGuess] = useState(row.guess ?? "");
+  const digits = (v) => v.replace(/\D/g, "");
+  const num = (v) => (v ? parseInt(v, 10) : null);
+  return (
+    <div className="record recordCompact attemptEdit">
+      <span className="meta">Correcting the attempt from {row.at ? fmtDate(row.at) : "an unknown date"}</span>
+      <label className="field">
+        <span className="fieldLabel">Which move did you reach for?</span>
+        <input className="line" list="technique-labels" value={guess} spellCheck={false}
+          onChange={(e) => setGuess(e.target.value)} placeholder="start typing a technique" />
+      </label>
+      <div className="fields2">
+        <label className="field">
+          <span className="fieldLabel">Minutes until you knew</span>
+          <input className="line fig" inputMode="numeric" value={knew}
+            onChange={(e) => setKnew(digits(e.target.value))} />
+        </label>
+        <label className="field">
+          <span className="fieldLabel">Minutes in total</span>
+          <input className="line fig" inputMode="numeric" value={minutes}
+            onChange={(e) => setMinutes(digits(e.target.value))} />
+        </label>
+      </div>
+      <label className="field">
+        <span className="fieldLabel">How it went</span>
+        <select className="line" value={outcome} onChange={(e) => setOutcome(e.target.value)}>
+          {Object.entries(OUTCOMES).map(([k, o]) => <option key={k} value={k}>{o.label}</option>)}
+        </select>
+      </label>
+      <div className="repActions">
+        <button className="btn btnSm btnStrong"
+          onClick={() => onSave({ outcome, minutes: num(minutes), knew: num(knew), guess: guess.trim() || null })}>
+          Save the correction
+        </button>
+        <button className="btn btnSm btnBare" onClick={onCancel}>Cancel</button>
+      </div>
     </div>
   );
 }
@@ -1997,6 +2061,8 @@ select.line { appearance: none; padding-right: 20px;
 .timeline { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 4px 11px; }
 .timelineRow { display: flex; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
 .timelineDate { color: var(--ink-3); min-width: 58px; }
+.timelineEdit { margin: -8px 0 -8px auto; }
+.attemptEdit { margin-top: 4px; }
 
 /* Notices: the marking pen, a rule, and no coloured box. */
 .notice { margin: 12px 16px; padding: 14px 15px; background: var(--sheet);
