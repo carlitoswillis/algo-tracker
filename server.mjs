@@ -23,7 +23,11 @@ const __dirname = path.dirname(__filename)
 const distDir = path.join(__dirname, 'dist')
 
 const PORT = Number(process.env.ALGO_TRACKER_PORT ?? 7790)
-const HOST = '0.0.0.0'
+// Loopback by default — with no auth on /api/state (see the header comment
+// above), binding wider than that hands read/write access to anyone who can
+// reach the port. Opt in explicitly for a shared machine (Tailscale, LAN)
+// with ALGO_TRACKER_LAN=1, or set ALGO_TRACKER_HOST directly for full control.
+const HOST = process.env.ALGO_TRACKER_HOST ?? (process.env.ALGO_TRACKER_LAN === '1' ? '0.0.0.0' : '127.0.0.1')
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -39,7 +43,10 @@ const MIME = {
 
 // Any origin is allowed on the API routes: the extension calls /api/state
 // cross-origin, and with no password on a private network there is nothing to
-// protect.
+// protect. Authorization is allowed through, not checked: this server never
+// reads it, but a reverse proxy sitting in front of it (see
+// openwiki/deployment/authentication.md) might, and the extension will send
+// the password the user configured either way.
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
