@@ -155,6 +155,16 @@ const clock = (secs) => {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 };
 
+// The other direction: what you type into the clock. "12:30" is minutes and
+// seconds, "12" or "12.5" is minutes — the numeric keypad has no colon.
+const unclock = (text) => {
+  const t = text.trim();
+  let m;
+  if ((m = /^(\d{1,3}):(\d{1,2})$/.exec(t))) return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  if ((m = /^(\d{1,3})(?:[.,](\d{1,2}))?$/.exec(t))) return Math.round(parseFloat(`${m[1]}.${m[2] || 0}`) * 60);
+  return null;
+};
+
 // The gutter figure for "how long since": the sort key on the moves ledger,
 // short enough to sit in 44px of mono.
 const sinceFig = (days) => (days == null ? "—" : days <= 0 ? "0d" : `${days}d`);
@@ -760,12 +770,31 @@ function RepScreen({ item, position, total, ready, postponing, setPostponing,
   const [secs, setSecs] = useState(0);
   const [running, setRunning] = useState(false);
   const [knewAt, setKnewAt] = useState(null); // seconds at which the move landed
+  // The clock is typeable: solving happens in another tab, or on paper, and
+  // the time is something you know rather than something the app watched.
+  // While a draft is open the timer is paused and the clock shows the draft.
+  const [draft, setDraft] = useState(null);
 
+  // Elapsed is wall-clock, not a count of ticks: a backgrounded tab on the
+  // iPad stops ticking, and the time you spent should not stop with it.
   useEffect(() => {
     if (!running) return;
-    const t = setInterval(() => setSecs((s) => s + 1), 1000);
-    return () => clearInterval(t);
-  }, [running]);
+    const from = Date.now() - secs * 1000;
+    const tick = () => setSecs(Math.floor((Date.now() - from) / 1000));
+    const t = setInterval(tick, 500);
+    document.addEventListener("visibilitychange", tick);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", tick); };
+  }, [running]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openDraft = () => { setRunning(false); setDraft(clock(secs)); };
+  const closeDraft = () => {
+    const n = draft == null ? null : unclock(draft);
+    if (n != null) {
+      setSecs(n);
+      if (knewAt != null && knewAt > n) setKnewAt(null);
+    }
+    setDraft(null);
+  };
 
   // Minutes are only ever a prefill: a number you can see and change before it
   // is written, never one the app records behind your back.
@@ -828,7 +857,13 @@ function RepScreen({ item, position, total, ready, postponing, setPostponing,
       </p>
 
       <div className="split">
-        <div className="splitClock fig">{clock(secs)}</div>
+        <input className="splitClock fig" inputMode="decimal" spellCheck={false}
+          aria-label="Time so far, as minutes and seconds or as minutes"
+          value={draft ?? clock(secs)}
+          onFocus={openDraft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={closeDraft}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur(); }} />
         <div className="paceWrap">
           <div className="pace" role="img"
             aria-label={`${clock(secs)} of a ${est} minute budget`}>
@@ -841,6 +876,9 @@ function RepScreen({ item, position, total, ready, postponing, setPostponing,
             <span>budget <span className="fig">{clock(est * 60)}</span></span>
           </div>
         </div>
+        {!running && !secs && draft == null && (
+          <p className="splitHint">Or tap the clock and type the time you took.</p>
+        )}
         <div className="splitBtns">
           <button className="btn" onClick={() => setRunning(!running)}>
             {running ? "Pause" : secs ? "Resume" : "Start"}
@@ -933,12 +971,14 @@ function RepDone({ done, problems, techs, remaining, onNext, onBack }) {
 // convenience, never the record.
 function AttemptForm({ onRecord, footer, disabled, compact, autoMinutes = null, autoKnew = null }) {
   const [guess, setGuess] = useState("");
-  const [knew, setKnew] = useState("");
-  const [minutes, setMinutes] = useState("");
+  // null means untouched, so the clock's prefill shows through; once typed
+  // (even to empty) the field is yours and the clock stops overwriting it.
+  const [knew, setKnew] = useState(null);
+  const [minutes, setMinutes] = useState(null);
   const digits = (v) => v.replace(/\D/g, "");
   const num = (v) => (v ? parseInt(v, 10) : null);
-  const knewVal = knew || (autoKnew != null ? String(autoKnew) : "");
-  const minVal = minutes || (autoMinutes != null ? String(autoMinutes) : "");
+  const knewVal = knew ?? (autoKnew != null ? String(autoKnew) : "");
+  const minVal = minutes ?? (autoMinutes != null ? String(autoMinutes) : "");
 
   return (
     <div className={`record${compact ? " recordCompact" : ""}`}>
@@ -2007,7 +2047,10 @@ button, input, select, textarea { font-family: inherit; }
 .split { margin-top: 22px; padding: 16px; background: var(--sheet);
   border-top: 1px solid var(--rule-ink); border-bottom: 1px solid var(--rule-ink); }
 .splitClock { font-size: 46px; line-height: 1; font-weight: 400; letter-spacing: -0.03em;
-  color: var(--ink); }
+  color: var(--ink); display: block; width: 100%; max-width: 8ch; margin: 0; padding: 0 0 2px;
+  border: 0; border-bottom: 1px solid transparent; border-radius: 0; background: transparent;
+  -webkit-appearance: none; }
+.splitClock:focus { outline: none; border-bottom-color: var(--mark); }
 .paceWrap { margin-top: 14px; }
 .pace { position: relative; height: 10px; border-bottom: 1px solid var(--rule-ink); }
 .paceFill { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--ink-2); }
@@ -2015,6 +2058,7 @@ button, input, select, textarea { font-family: inherit; }
 .paceKnew { position: absolute; bottom: -1px; width: 2px; height: 9px; background: var(--mark); }
 .paceEnds { display: flex; justify-content: space-between; gap: 12px; margin-top: 7px;
   font-size: 12.5px; color: var(--ink-3); }
+.splitHint { margin: 12px 0 0; font-size: 12.5px; color: var(--ink-3); }
 .splitBtns { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
 
 /* Fields sit on a rule, the way a form on paper does. */
