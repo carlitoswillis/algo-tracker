@@ -683,17 +683,25 @@ export function TodayView({ techs, problems, delays, ready, budget, pickBudget,
         </p>
       ) : items.length === 0 ? (
         <p className="prose">
-          Nothing is waiting. Every technique you have started has had a rep recently
-          enough, and any you postponed comes back on its own. Browse the library if you
-          want extra ground.
+          Nothing is waiting. Every technique you have started has had a rep today or
+          recently enough, and any you postponed comes back on its own. Browse the library
+          if you want extra ground.
+          {plan.spent >= budget && ` Today's goal is met: ${numberWord(plan.spent)} minutes logged against the ${numberWord(budget)} you set.`}
         </p>
       ) : null}
 
       {items.length > 0 && (
         <>
           <Head count={`${plan.totalMin} min`}>
-            {numberWord(items.length)} {plural(items.length, "rep")} today
+            {plan.spent >= budget ? "Extra, goal met" : `${numberWord(items.length)} ${plural(items.length, "rep")} today`}
           </Head>
+          {plan.spent > 0 && (
+            <p className="note">
+              {plan.spent >= budget
+                ? `Today's goal is met: ${numberWord(plan.spent)} minutes logged against the ${numberWord(budget)} you set. Everything below is extra.`
+                : `${cap(numberWord(plan.spent))} of today's ${numberWord(budget)} minutes are logged, ${numberWord(budget - plan.spent)} to go.`}
+            </p>
+          )}
           <div className="entries">
             {items.map((item) => <Entry key={item.tech.key} item={item} onOpen={() => setOpenKey(item.tech.key)} />)}
           </div>
