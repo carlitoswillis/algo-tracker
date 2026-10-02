@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url'
 import { dirname } from 'path'
 import { handleStateRequest } from './lib/local-state.js'
 import { handlePlanRequest } from './lib/plan-api.js'
+import { handleSetsRequest } from './lib/sets-api.js'
 import { readCatalog } from './lib/problem-data.js'
 import { resolveData } from './lib/data-dir.js'
 
@@ -51,6 +52,7 @@ export default defineConfig({
         server.middlewares.use((req, res, next) => {
           if (handleStateRequest(req, res, { dir: __dirname })) return
           if (handlePlanRequest(req, res, { dir: __dirname })) return
+          if (handleSetsRequest(req, res, { dir: __dirname })) return
           next()
         })
       }

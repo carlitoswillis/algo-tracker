@@ -24,6 +24,9 @@ import {
   techniqueOf, lookupEntry, deriveTechniques, buildPlan,
   priority, isSkipped, staleness, TECHNIQUE_LABELS,
 } from "./lib/techniques.js";
+import {
+  parseSetText, formatSetText, entryForItem, problemForItem, setId, validateSets,
+} from "./lib/sets.js";
 
 // The whole curriculum as one browsable list — every problem either source
 // knows, whether or not the scheduler has ever served it. Built once: the
@@ -184,9 +187,9 @@ export default function GrindTracker() {
   const [status, setStatus] = useState("loading");
   const [saving, setSaving] = useState(null); // null | "saving" | "saved" | { error }
   // The tab lives in the URL hash so a view can be linked to and reloaded.
-  const TABS = ["today", "techniques", "library", "log"];
+  const TABS = ["today", "sets", "techniques", "library", "log"];
   const [tab, setTabState] = useState(() => {
-    const h = (typeof window !== "undefined" ? window.location.hash : "").replace(/^#/, "");
+    const h = (typeof window !== "undefined" ? window.location.hash : "").replace(/^#/, "").split("/")[0];
     return TABS.includes(h) ? h : "today";
   });
   const setTab = (k) => {
@@ -204,6 +207,38 @@ export default function GrindTracker() {
     return SESSION_SIZES.includes(v) ? v : 90;
   });
   const fileInput = useRef(null);
+
+  // Custom sets: hand-picked problems on one clock. Their own file and their
+  // own fetch — the log's revision check never has to know they exist. The
+  // open set lives in the hash (#sets/<id>) so a set page can be reloaded.
+  const [openSet, setOpenSetState] = useState(() => {
+    const h = (typeof window !== "undefined" ? window.location.hash : "").replace(/^#/, "");
+    const [base, id] = h.split("/");
+    return base === "sets" && id ? decodeURIComponent(id) : null;
+  });
+  const setOpenSet = (id) => {
+    setOpenSetState(id);
+    try { history.replaceState(null, "", id ? `#sets/${encodeURIComponent(id)}` : "#sets"); } catch { /* fine */ }
+  };
+  const [sets, setSets] = useState(null); // null = loading
+  const [setsError, setSetsError] = useState(null);
+  const loadSets = React.useCallback(() => {
+    fetch("/api/sets").then(async (r) => {
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+      setSets(Array.isArray(body.sets) ? body.sets : []);
+      setSetsError(null);
+    }).catch((e) => { setSets([]); setSetsError(e.message); });
+  }, []);
+  useEffect(loadSets, [loadSets]);
+  async function saveSets(next) {
+    const r = await fetch("/api/sets", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sets: next }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+    setSets(Array.isArray(body.sets) ? body.sets : next);
+  }
 
   const revRef = useRef(0);        // the revision this tab last read or wrote
   const savedRef = useRef(null);   // serialised problems already on the server
@@ -400,11 +435,14 @@ export default function GrindTracker() {
   // The rep screen takes the whole viewport: while you are working a problem the
   // header, the nav and the rest of the session are noise.
   const [focused, setFocused] = useState(false);
-  useEffect(() => { if (tab !== "today") setFocused(false); }, [tab]);
+  useEffect(() => { if (tab !== "today" && tab !== "sets") setFocused(false); }, [tab]);
 
 
   const head = tab === "today"
     ? { title: fmtLong(Date.now()), meta: null }
+    : tab === "sets"
+    ? { title: (openSet && sets?.find((s) => s.id === openSet)?.name) || "Sets",
+        meta: sets ? `${sets.length} ${plural(sets.length, "set")} on file` : null }
     : tab === "techniques"
     ? { title: "Moves", meta: `${startedCount} of ${catalogedCount} started` }
     : tab === "library"
@@ -474,6 +512,11 @@ export default function GrindTracker() {
           <TodayView techs={techs} problems={problems} delays={delays} ready={ready} budget={budget}
             pickBudget={pickBudget} focused={focused} setFocused={setFocused} setProblemBudget={setProblemBudget}
             recordFresh={recordFresh} recordAttempt={recordAttempt} delayTech={delayTech} />
+        ) : tab === "sets" ? (
+          <SetsView sets={sets} setsError={setsError} saveSets={saveSets} reloadSets={loadSets}
+            openId={openSet} setOpenId={setOpenSet}
+            problems={problems} techs={techs} ready={ready} setFocused={setFocused}
+            recordFresh={recordFresh} recordAttempt={recordAttempt} />
         ) : tab === "techniques" ? (
           <TechniquesView techs={techs} delays={delays} />
         ) : tab === "library" ? (
@@ -491,7 +534,7 @@ export default function GrindTracker() {
 
       {!focused && (
         <nav className="strip" aria-label="Sections">
-          {[["today", "Today"], ["techniques", "Moves"]].map(([k, label]) => (
+          {[["today", "Today"], ["sets", "Sets"], ["techniques", "Moves"]].map(([k, label]) => (
             <button key={k} className={`stripTab${tab === k ? " stripTabOn" : ""}`} onClick={() => setTab(k)}
               aria-current={tab === k ? "page" : undefined}>{label}</button>
           ))}
@@ -760,7 +803,8 @@ function Entry({ item, onOpen }) {
 // it can have gone. A blind item's technique appears nowhere in here — not in
 // the copy, not in a title, not in an aria-label.
 function RepScreen({ item, position, total, ready, postponing, setPostponing,
-  ownBudget, onBudget, onBack, onReroll, onPostpone, onRecord }) {
+  ownBudget, onBudget, onBack, onReroll, onPostpone, onRecord,
+  backLabel = "Today", banner = null, canPostpone = true }) {
   const { tech, serve } = item;
   const p = serve.problem;
   // The budget is editable right here: the tier estimate is a guess about the
@@ -816,9 +860,10 @@ function RepScreen({ item, position, total, ready, postponing, setPostponing,
 
   return (
     <div className="rep">
-      <button className="back" onClick={onBack} aria-label="Back to today">
-        <Chevron dir="left" />Today
+      <button className="back" onClick={onBack} aria-label={`Back to ${backLabel.toLowerCase()}`}>
+        <Chevron dir="left" />{backLabel}
       </button>
+      {banner && <p className="repBanner">{banner}</p>}
 
       <h1 className="repName">{p.name}</h1>
       <p className="repMeta">
@@ -911,7 +956,7 @@ function RepScreen({ item, position, total, ready, postponing, setPostponing,
               <button className="btn btnSm btnBare" onClick={() => onPostpone(7)}>In a week</button>
               <button className="btn btnSm btnBare" onClick={() => setPostponing(false)}>Keep it</button>
             </div>
-          ) : (
+          ) : !canPostpone ? null : (
             <div className="repActions">
               {serve.alts > 1 && (
                 <button className="btn btnSm btnBare" onClick={onReroll}>Serve something else</button>
@@ -928,16 +973,17 @@ function RepScreen({ item, position, total, ready, postponing, setPostponing,
 // What just happened, on the rep's own screen: the verdict on the guess, the
 // time against the budget, and whether the technique moved. Today is one tap
 // away, but it shouldn't be where you first learn what the move was.
-function RepDone({ done, problems, techs, remaining, onNext, onBack }) {
+function RepDone({ done, problems, techs, remaining, onNext, onBack,
+  backLabel = "Today", lastWords = "That was the last rep that fit today." }) {
   const p = done.id ? problems.find((x) => x.id === done.id) : findExisting(problems, done.entry);
   const tech = techs.find((t) => t.key === done.key);
-  const budget = p ? budgetOf(p) : done.budget;
+  const budget = done.fixedBudget ?? (p ? budgetOf(p) : done.budget);
   const over = done.minutes != null && done.minutes > budget;
   const moved = tech && tech.tier != null && tech.tier !== done.tier;
   return (
     <div className="rep">
-      <button className="back" onClick={onBack} aria-label="Back to today">
-        <Chevron dir="left" />Today
+      <button className="back" onClick={onBack} aria-label={`Back to ${backLabel.toLowerCase()}`}>
+        <Chevron dir="left" />{backLabel}
       </button>
 
       <h1 className="repName">{p?.name ?? done.name}</h1>
@@ -953,6 +999,9 @@ function RepDone({ done, problems, techs, remaining, onNext, onBack }) {
         {over && done.outcome === "cold" && "Unaided and optimal, but over pace, so it does not count toward the climb. "}
         {done.why && `Served because: ${done.why}.`}
       </p>
+      {done.note && (
+        <p className="repSay"><span className="named">The trap.</span> {done.note}</p>
+      )}
 
       {tech && tech.tier != null && (
         <div className="movedRow doneRow">
@@ -966,8 +1015,8 @@ function RepDone({ done, problems, techs, remaining, onNext, onBack }) {
       <div className="repActions doneActions">
         {remaining > 0
           ? <button className="btn btnStrong" onClick={onNext}>Next rep</button>
-          : <span className="meta">That was the last rep that fit today.</span>}
-        <button className="btn btnBare" onClick={onBack}>Back to today</button>
+          : <span className="meta">{lastWords}</span>}
+        <button className="btn btnBare" onClick={onBack}>Back to {backLabel.toLowerCase()}</button>
       </div>
     </div>
   );
@@ -1101,6 +1150,434 @@ function Grade({ tier }) {
     <span className="grade" role="img" aria-label={`Serving ${tierWord(cur)} problems`}>
       {TIERS_SERVED.map((t, i) => <span key={t} className={`gradeStep${i <= cur ? " on" : ""}`} />)}
     </span>
+  );
+}
+
+// ---------- Sets ----------
+// A custom set: problems you picked, in the order you picked them, on one
+// clock — the shape of a particular assessment rather than the ranked session
+// Today builds. Each rep is the same rep screen Today uses and logs the same
+// way, so the technique tiers see the evidence; the set adds only the order
+// and the clock. An item's note travels hidden until the attempt is logged,
+// for the same reason the technique does.
+const setClockKey = (id) => `grind-set-clock:${id}`;
+function readSetClock(id) {
+  try {
+    const v = parseInt(sessionStorage.getItem(setClockKey(id)) ?? "", 10);
+    return Number.isFinite(v) ? v : null;
+  } catch { return null; }
+}
+function writeSetClock(id, ts) {
+  try {
+    if (ts == null) sessionStorage.removeItem(setClockKey(id));
+    else sessionStorage.setItem(setClockKey(id), String(ts));
+  } catch { /* session only */ }
+}
+
+// Today's attempts on one problem record, oldest first.
+function todaysAttempts(p) {
+  if (!p) return [];
+  const start = todayStart();
+  return (p.log || [])
+    .map((ts, i) => ({ ts, i, outcome: p.history[i], minutes: p.times?.[i] ?? null }))
+    .filter((a) => a.ts >= start);
+}
+
+// Each item of a set against the catalog and the log: the problem it serves,
+// the record it already has (if any), and what was logged on it today.
+function resolveSet(set, problems) {
+  const items = (set.items ?? []).map((it, i) => {
+    const entry = problemForItem(it, LIBRARY);
+    const tracked = findExisting(problems, entry);
+    return { it, i, entry, tracked, today: todaysAttempts(tracked), minutes: it.minutes ?? budgetOf(entry) };
+  });
+  return {
+    items,
+    totalMin: items.reduce((s, r) => s + r.minutes, 0),
+    doneCount: items.filter((r) => r.today.length).length,
+  };
+}
+
+export function SetsView({ sets, setsError, saveSets, reloadSets, openId, setOpenId,
+  problems, techs, ready, setFocused, recordFresh, recordAttempt }) {
+  const [editing, setEditing] = useState(null); // null | "new" | a set id
+  const open = openId && sets ? sets.find((s) => s.id === openId) ?? null : null;
+
+  useEffect(() => { if (!open) setFocused(false); }, [open, setFocused]);
+
+  async function upsert(set) {
+    const list = sets ?? [];
+    const next = list.some((s) => s.id === set.id)
+      ? list.map((s) => (s.id === set.id ? set : s))
+      : [...list, set];
+    await saveSets(next);
+    setEditing(null);
+    setOpenId(set.id);
+  }
+
+  async function remove(id) {
+    const s = (sets ?? []).find((x) => x.id === id);
+    if (s && !window.confirm(`Remove the set ${s.name}? Attempts you logged from it stay in the log.`)) return;
+    await saveSets((sets ?? []).filter((x) => x.id !== id));
+    setOpenId(null);
+  }
+
+  // Groups in order of first appearance, ungrouped sets last with no heading;
+  // finished sets leave their groups and gather under one Done section.
+  const doneSets = (sets ?? []).filter((s) => s.done === true);
+  const groups = useMemo(() => {
+    const order = [], by = new Map();
+    for (const s of sets ?? []) {
+      if (s.done === true) continue;
+      const g = (s.group || "").trim() || null;
+      if (!by.has(g)) { by.set(g, []); order.push(g); }
+      by.get(g).push(s);
+    }
+    const named = order.filter((g) => g != null);
+    return [...named, ...(by.has(null) ? [null] : [])].map((g) => ({ name: g, sets: by.get(g) }));
+  }, [sets]);
+
+  const editor = editing && (
+    <SetEditor set={editing === "new" ? null : (sets ?? []).find((s) => s.id === editing) ?? null}
+      sets={sets} onClose={() => setEditing(null)} onSave={upsert} />
+  );
+
+  if (open) {
+    return (
+      <>
+        <SetPage set={open} problems={problems} techs={techs} ready={ready} setFocused={setFocused}
+          recordFresh={recordFresh} recordAttempt={recordAttempt}
+          onBack={() => setOpenId(null)} onEdit={() => setEditing(open.id)} onRemove={() => remove(open.id)} />
+        {editor}
+      </>
+    );
+  }
+
+  return (
+    <div>
+      {setsError && (
+        <Notice title="Your sets could not be read">
+          <p>{setsError}</p>
+          <div className="noticeActions"><button className="btn" onClick={reloadSets}>Try again</button></div>
+        </Notice>
+      )}
+      <p className="prose">
+        A set is problems you picked, in the order you picked them, against one clock: the
+        shape of a particular assessment, rather than the ranked session Today builds. Every
+        rep in a set logs exactly as a Today rep does.
+      </p>
+      {sets == null ? (
+        <p className="note">Loading your sets.</p>
+      ) : sets.length === 0 ? (
+        <p className="note">No sets yet. Make one from a list of problem names, one per line.</p>
+      ) : (
+        <>
+          <Head count={sets.length}>{plural(sets.length, "Set")} on file{doneSets.length ? `, ${doneSets.length} done` : ""}</Head>
+          {groups.map((g) => (
+            <div key={g.name ?? ""}>
+              {g.name && <Head count={g.sets.length}>{g.name}</Head>}
+              <div className="entries">
+                {g.sets.map((s) => <SetEntry key={s.id} set={s} problems={problems} onOpen={() => setOpenId(s.id)} />)}
+              </div>
+            </div>
+          ))}
+          {doneSets.length > 0 && (
+            <div>
+              <Head count={doneSets.length}>Done</Head>
+              <div className="entries">
+                {doneSets.map((s) => <SetEntry key={s.id} set={s} problems={problems} compact onOpen={() => setOpenId(s.id)} />)}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+      <div className="setActions">
+        <button className="btn" disabled={!ready} onClick={() => setEditing("new")}>New set</button>
+      </div>
+      {editor}
+    </div>
+  );
+}
+
+function SetEntry({ set, problems, onOpen, compact }) {
+  const r = resolveSet(set, problems);
+  const n = r.items.length;
+  if (compact) {
+    return (
+      <button className="entry entryDone entryLine" onClick={onOpen} aria-label={`Open the set ${set.name}`}>
+        <span className="gutter setGroupGutter">{set.group || <Fig unit="min">{set.minutes ?? r.totalMin}</Fig>}</span>
+        <span className="stack">
+          <span className="entryFoot">
+            <span className="entryName">{set.name}</span>
+            <span className="entryGo">open<Chevron /></span>
+          </span>
+        </span>
+      </button>
+    );
+  }
+  return (
+    <button className="entry" onClick={onOpen} aria-label={`Open the set ${set.name}`}>
+      <span className="gutter"><Fig unit="min">{set.minutes ?? r.totalMin}</Fig></span>
+      <span className="stack">
+        <span className="entryName">{set.name}</span>
+        <span className="entryFoot">
+          <span className="meta">
+            {numberWord(n)} {plural(n, "problem")}
+            {r.doneCount ? `, ${numberWord(r.doneCount)} logged today` : ""}
+          </span>
+          <span className="entryGo">open<Chevron /></span>
+        </span>
+      </span>
+    </button>
+  );
+}
+
+// One set's page: its clock, its problems in order, and what today has logged
+// against each. Opening a problem hands it to the ordinary rep screen.
+function SetPage({ set, problems, techs, ready, setFocused, recordFresh, recordAttempt, onBack, onEdit, onRemove }) {
+  const r = useMemo(() => resolveSet(set, problems), [set, problems]);
+  const [openIdx, setOpenIdx] = useState(null);
+  const [done, setDone] = useState(null);
+  // The set's clock is wall-clock from the moment you start it, kept for this
+  // browser session only: it survives opening reps and reloading the page,
+  // and is gone tomorrow, which is what a drill clock should be.
+  const [start, setStart] = useState(() => readSetClock(set.id));
+  const [now, setNow] = useState(Date.now());
+  const total = set.minutes ?? r.totalMin;
+
+  useEffect(() => { setFocused(openIdx != null || !!done); }, [openIdx, done, setFocused]);
+  useEffect(() => {
+    if (start == null) return;
+    const tick = () => setNow(Date.now());
+    const t = setInterval(tick, 1000);
+    document.addEventListener("visibilitychange", tick);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", tick); };
+  }, [start]);
+
+  const startClock = () => { const ts = Date.now(); writeSetClock(set.id, ts); setStart(ts); setNow(ts); };
+  const resetClock = () => { writeSetClock(set.id, null); setStart(null); };
+  const elapsed = start == null ? 0 : Math.floor((now - start) / 1000);
+  const left = total * 60 - elapsed;
+  const banner = start == null ? null
+    : left >= 0 ? <><span className="fig">{clock(left)}</span> left of the set’s <span className="fig">{clock(total * 60)}</span></>
+    : <>over the set’s <span className="fig">{clock(total * 60)}</span> by <span className="fig">{clock(-left)}</span></>;
+
+  const nextUndone = (after) =>
+    r.items.find((x) => x.i > after && !x.today.length)
+    ?? r.items.find((x) => x.i !== after && !x.today.length)
+    ?? null;
+
+  function record(row, outcome, minutes, guess, knew) {
+    const p = row.tracked ?? row.entry;
+    const id = techniqueOf(p);
+    const tech = techs.find((t) => t.key === id.key);
+    setDone({
+      key: id.key, tier: tech?.tier ?? 0, why: null, name: p.name, note: row.it.note ?? null,
+      id: row.tracked ? row.tracked.id : null, entry: { url: p.url, name: p.name },
+      outcome, minutes, guess, knew, budget: row.minutes, fixedBudget: row.minutes, idx: row.i,
+    });
+    if (row.tracked) recordAttempt(row.tracked.id, outcome, minutes, { guess, knew });
+    else recordFresh(p, outcome, minutes, { guess, knew });
+    setOpenIdx(null);
+  }
+
+  if (done) {
+    const next = nextUndone(done.idx);
+    return (
+      <RepDone done={done} problems={problems} techs={techs} remaining={next ? 1 : 0}
+        backLabel="Set" lastWords="That was the last problem in the set."
+        onNext={() => { setDone(null); setOpenIdx(next.i); }}
+        onBack={() => setDone(null)} />
+    );
+  }
+
+  const row = openIdx != null ? r.items[openIdx] : null;
+  if (row) {
+    const p = row.tracked ?? row.entry;
+    const item = {
+      tech: { key: `set:${set.id}:${row.i}`, label: p.name, stage: "practice", tier: null, lapses: 0 },
+      serve: { mode: row.tracked ? "resolve" : "fresh", problem: p, alts: 1, blind: true },
+      est: row.minutes, why: null,
+    };
+    return (
+      <RepScreen key={`${set.id}:${row.i}`} item={item} position={row.i} total={r.items.length} ready={ready}
+        postponing={false} setPostponing={() => {}} canPostpone={false}
+        backLabel="Set" banner={banner}
+        ownBudget={row.minutes} onBudget={() => {}}
+        onBack={() => setOpenIdx(null)} onReroll={() => {}} onPostpone={() => {}}
+        onRecord={(outcome, minutes, guess, knew) => record(row, outcome, minutes, guess, knew)} />
+    );
+  }
+
+  return (
+    <div>
+      <button className="back" onClick={onBack} aria-label="Back to sets"><Chevron dir="left" />Sets</button>
+      {set.note && <p className="prose">{set.note}</p>}
+
+      <div className="setClock">
+        <span className="setClockFig fig">
+          {start == null ? clock(total * 60) : left >= 0 ? clock(left) : `-${clock(-left)}`}
+        </span>
+        <span className="meta">
+          {start == null
+            ? `${numberWord(total)} minutes for ${numberWord(r.items.length)} ${plural(r.items.length, "problem")}, in order. Start the clock as you open the first one.`
+            : left >= 0 ? `left of ${numberWord(total)} minutes` : `over the ${numberWord(total)} minutes`}
+        </span>
+        <div className="setClockBtns">
+          {start == null
+            ? <button className="btn btnStrong" onClick={startClock}>Start the clock</button>
+            : <button className="btn btnSm btnBare" onClick={resetClock}>Reset the clock</button>}
+        </div>
+      </div>
+
+      <Head count={`${r.totalMin} min`}>
+        {numberWord(r.items.length)} {plural(r.items.length, "problem")}
+        {r.doneCount ? `, ${numberWord(r.doneCount)} logged today` : ""}
+      </Head>
+      <div className="entries">
+        {r.items.map((x) => {
+          const p = x.tracked ?? x.entry;
+          const last = x.today[x.today.length - 1];
+          return (
+            <button key={x.i} className={`entry${last ? " entryDone" : ""}`} onClick={() => setOpenIdx(x.i)}
+              aria-label={`${last ? "Repeat" : "Start"} ${p.name}, ${(p.difficulty || "medium").toLowerCase()}, ${x.minutes} minutes`}>
+              <span className="gutter"><Fig unit="min">{x.minutes}</Fig></span>
+              <span className="stack">
+                <span className="entryName">{p.name}</span>
+                <span className="entryFoot">
+                  <span className="meta">
+                    {(p.difficulty || "medium").toLowerCase()}, {x.entry.unlisted ? "not in the catalog" : sourceOf(p)}
+                    {last
+                      ? <>, logged {OUTCOMES[last.outcome].label.toLowerCase()}
+                          {last.minutes != null && <> in <span className="fig">{last.minutes}</span> min</>}</>
+                      : x.tracked ? ", solved before" : ", never solved"}
+                  </span>
+                  <span className="entryGo">{last ? "again" : "start"}<Chevron /></span>
+                </span>
+                {last && x.it.note && (
+                  <span className="meta setNote"><span className="named">The trap.</span> {x.it.note}</span>
+                )}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="note">
+        A note on a problem stays hidden until its attempt is logged, for the same reason
+        the technique does. Logging here is logging: the log and the moves see every rep.
+      </p>
+      <div className="setActions">
+        <button className="btn btnSm" onClick={onEdit}>Edit the set</button>
+        <button className="btn btnSm btnBare" onClick={onRemove}>Remove the set</button>
+      </div>
+    </div>
+  );
+}
+
+// Making a set is typing a list: one problem per line, a name and optionally a
+// minute budget, a link, and a note, separated by pipes. Each line is matched
+// against the catalog as you type, so a misspelt name shows up before it is
+// saved rather than as a rep that opens nowhere.
+function SetEditor({ set, sets, onClose, onSave }) {
+  const [name, setName] = useState(set?.name ?? "");
+  const [minutes, setMinutes] = useState(set?.minutes ? String(set.minutes) : "45");
+  const [note, setNote] = useState(set?.note ?? "");
+  const [group, setGroup] = useState(set?.group ?? "");
+  const [finished, setFinished] = useState(set?.done === true);
+  const [text, setText] = useState(set ? formatSetText(set) : "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const parsed = useMemo(() => parseSetText(text), [text]);
+  const rows = useMemo(() => parsed.items.map((it) => ({ it, entry: entryForItem(it, LIBRARY) })), [parsed]);
+  const canSave = !!name.trim() && parsed.items.length > 0 && !busy;
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      const taken = new Set((sets ?? []).map((s) => s.id).filter((id) => id !== set?.id));
+      const id = set?.id ?? setId(name, taken);
+      const m = parseInt(minutes, 10) || null;
+      const next = {
+        id, name: name.trim(),
+        ...(m ? { minutes: m } : {}),
+        ...(note.trim() ? { note: note.trim() } : {}),
+        ...(group.trim() ? { group: group.trim() } : {}),
+        ...(finished ? { done: true } : {}),
+        items: parsed.items,
+      };
+      const v = validateSets({ sets: [next] });
+      if (!v.ok) throw new Error(v.error);
+      await onSave(next);
+    } catch (e) {
+      setError(e.message || "The set could not be saved.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Sheet label={set ? "Edit the set" : "New set"} title={set ? set.name : "New set"} onClose={onClose}
+      bar={
+        <>
+          <button className="btn btnStrong" disabled={!canSave} onClick={save}>
+            {busy ? "Saving" : set ? "Save" : "Make the set"}
+          </button>
+          <button className="btn btnBare" onClick={onClose}>Cancel</button>
+        </>
+      }>
+      <label className="field">
+        <span className="fieldLabel">Name</span>
+        <input className="line" value={name} onChange={(e) => setName(e.target.value)} placeholder="CodeSignal, set D" />
+      </label>
+      <label className="field">
+        <span className="fieldLabel">Minutes for the whole set</span>
+        <input className="line fig" inputMode="numeric" value={minutes}
+          onChange={(e) => setMinutes(e.target.value.replace(/\D/g, ""))} />
+      </label>
+      <label className="field">
+        <span className="fieldLabel">Group: the company or assessment it is shaped for</span>
+        <input className="line" value={group} onChange={(e) => setGroup(e.target.value)} placeholder="Chime" />
+      </label>
+      <label className="field checkField">
+        <input type="checkbox" checked={finished} onChange={(e) => setFinished(e.target.checked)} />
+        <span className="fieldLabel">Done: the assessment has happened; keep the set for reference</span>
+      </label>
+      <label className="field">
+        <span className="fieldLabel">Why this set exists, shown on its page</span>
+        <textarea className="line area" value={note} onChange={(e) => setNote(e.target.value)} />
+      </label>
+      <label className="field">
+        <span className="fieldLabel">
+          Problems, one per line: name | minutes | note. A link after the name opens the problem there.
+        </span>
+        <textarea className="line area setText" value={text} spellCheck={false}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={"Run Length Encoding | 10 | runs longer than 9 must split\nValid Ip Addresses | 20"} />
+      </label>
+
+      {rows.length > 0 && (
+        <div className="recs">
+          {rows.map(({ it, entry }, i) => (
+            <div key={i} className="rec">
+              <span className="gutter"><Fig unit="min">{it.minutes ?? (entry ? budgetOf(entry) : "—")}</Fig></span>
+              <span className="stack">
+                <span className="recName">{entry?.name ?? it.name}</span>
+                <span className="meta">
+                  {entry
+                    ? `${entry.difficulty.toLowerCase()}, ${entry.category.toLowerCase()}, ${sourceOf(entry)}`
+                    : it.url
+                    ? "not in the catalog; opens by the link you gave"
+                    : "not in the catalog and no link, so it opens nowhere; the name still logs"}
+                  {it.note ? "; note hidden until logged" : ""}
+                </span>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {parsed.problems.map((m, i) => <p key={i} className="note">Skipped {m}.</p>)}
+      {error && <p className="note mark">{error}</p>}
+    </Sheet>
   );
 }
 
@@ -2074,6 +2551,10 @@ button, input, select, textarea { font-family: inherit; }
 .recordCompact { padding-top: 0; }
 .field { display: flex; flex-direction: column; gap: 4px; padding: 10px 16px; }
 .fieldLabel { font-size: 13px; color: var(--ink-2); }
+.checkField { flex-direction: row; align-items: center; gap: 10px; }
+.checkField input { flex: none; margin: 0; accent-color: var(--ink); }
+.entryLine .stack { padding: 10px 0 10px 14px; }
+.setGroupGutter { padding: 10px 11px 10px 0; font-size: 12px; line-height: 1.3; overflow-wrap: anywhere; }
 .fields2 { display: grid; grid-template-columns: 1fr 1fr; }
 .line { width: 100%; border: 0; border-bottom: 1px solid var(--rule-ink); border-radius: 0;
   background: transparent; padding: 9px 0; font-size: 16px; color: var(--ink);
@@ -2177,6 +2658,17 @@ a { color: var(--ink); }
   .isFocused .sheetPage { padding-top: 8px; }
   .undo { bottom: 24px; }
 }
+
+/* ── Sets ───────────────────────────────────────────────────────────────── */
+.entryDone { opacity: 0.62; }
+.setNote { margin-top: 4px; }
+.setClock { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px;
+  padding: 14px 16px 2px; }
+.setClockFig { font-size: 32px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+.setClockBtns { flex-basis: 100%; padding-top: 8px; }
+.setActions { display: flex; gap: 8px; flex-wrap: wrap; padding: 18px 16px 4px; }
+.setText { min-height: 170px; font-family: var(--mono); font-size: 13px; line-height: 1.55; }
+.repBanner { margin: 4px 16px 0; font-size: 13.5px; color: var(--ink-2); }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }

@@ -17,6 +17,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { handleStateRequest } from './lib/local-state.js'
 import { handlePlanRequest } from './lib/plan-api.js'
+import { handleSetsRequest } from './lib/sets-api.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -92,14 +93,16 @@ function serveIndexFallback(res) {
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host ?? 'localhost'}`)
 
-  if (url.pathname === '/api/state' || url.pathname === '/api/plan') {
+  if (url.pathname === '/api/state' || url.pathname === '/api/plan' || url.pathname === '/api/sets') {
     setCors(res)
     if (req.method === 'OPTIONS') {
       res.writeHead(204)
       res.end()
       return
     }
-    const handle = url.pathname === '/api/plan' ? handlePlanRequest : handleStateRequest
+    const handle = url.pathname === '/api/plan' ? handlePlanRequest
+      : url.pathname === '/api/sets' ? handleSetsRequest
+      : handleStateRequest
     const handled = handle(req, res, { dir: __dirname })
     if (handled) return
     res.writeHead(405, { 'Content-Type': 'application/json' })
