@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "start": "node server.mjs",
     "ext:sync": "node scripts/sync-extension.mjs",
-    "ext:check": "npm run ext:sync && git diff --exit-code --quiet extension/lib || (echo 'extension/lib was stale; it has been resynced' && exit 1)"
+    "ext:check": "npm run ext:sync && git diff --exit-code --quiet extension/lib || (echo 'extension/lib was stale; it has been resynced' && exit 1)",
+    "test": "node --test \"test/**/*.test.js\""
   },
   "dependencies": {
     "react": "^18.3.1",

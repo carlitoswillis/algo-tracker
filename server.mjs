@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url'
 import { handleStateRequest } from './lib/local-state.js'
 import { handlePlanRequest } from './lib/plan-api.js'
 import { handleSetsRequest } from './lib/sets-api.js'
+import { handleRecallRequest } from './lib/recall-api.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -50,7 +51,7 @@ const MIME = {
 // the password the user configured either way.
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
 }
 
@@ -93,7 +94,7 @@ function serveIndexFallback(res) {
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host ?? 'localhost'}`)
 
-  if (url.pathname === '/api/state' || url.pathname === '/api/plan' || url.pathname === '/api/sets') {
+  if (url.pathname === '/api/state' || url.pathname === '/api/plan' || url.pathname === '/api/sets' || url.pathname === '/api/recall') {
     setCors(res)
     if (req.method === 'OPTIONS') {
       res.writeHead(204)
@@ -102,6 +103,7 @@ const server = http.createServer((req, res) => {
     }
     const handle = url.pathname === '/api/plan' ? handlePlanRequest
       : url.pathname === '/api/sets' ? handleSetsRequest
+      : url.pathname === '/api/recall' ? handleRecallRequest
       : handleStateRequest
     const handled = handle(req, res, { dir: __dirname })
     if (handled) return

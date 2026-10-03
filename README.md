@@ -8,6 +8,8 @@ A practice journal for algorithm interviews. It schedules the technique, not the
 
 **Tiers.** Each technique carries the hardest disguise it has earned, climbed only by unaided optimal solves at interview pace on separate days and dropped by a fail. A technique you keep failing stops being served fresh problems and asks for worked solutions instead.
 
+**Recall.** Lines you type from memory, reference closed, before the session: the `defaultdict` import, the `Promise.all` shape. Judgment is what the reps train; this is fingers. Ten minutes, one line at a time — type it, reveal, say whether it was clean. A line retires after two clean days running; a miss brings it back the next day.
+
 ## Screenshots
 
 | Today | A rep in progress |
@@ -33,6 +35,7 @@ Everything the app reads that isn't code lives in one directory — `ALGO_DATA_D
 data/catalog.json           the problems to draw from
 data/state.json             your log
 data/state.snapshots.json   recent revisions, for recovery
+data/recall.json            idiom drill items and results
 ```
 
 `npm run demo` is `ALGO_DATA_DIR=examples npm run dev` on its own port. `ALGO_TRACKER_PORT` moves the server. `/api/state` and the read-only `/api/plan` behave the same in dev and in production: both run the same handlers.

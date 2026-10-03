@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "id": "py-01",
+      "side": "python",
+      "prompt": "Import and use `defaultdict(list)`; import and use `Counter(s).most_common(2)`",
+      "answer": "from collections import defaultdict, Counter\ngroups = defaultdict(list); groups[\"a\"].append(1)\nCounter(\"banana\").most_common(2)            # [('a', 3), ('n', 2)]"
+    },
+    {
+      "id": "py-02",
+      "side": "python",
+      "prompt": "Dict comprehension that inverts a dict",
+      "answer": "inv = {v: k for k, v in d.items()}"
+    },
+    {
+      "id": "py-03",
+      "side": "python",
+      "prompt": "`sorted` with a two-key lambda, second key descending",
+      "answer": "sorted(items, key=lambda x: (x[0], -x[1]))"
+    },
+    {
+      "id": "node-01",
+      "side": "node",
+      "prompt": "A React component with `useState(0)` and a button that increments",
+      "answer": "import { useState, useEffect } from \"react\";\nfunction Counter() {\n  const [count, setCount] = useState(0);\n  return <button onClick={() => setCount(c => c + 1)}>{count}</button>;\n}"
+    },
+    {
+      "id": "node-02",
+      "side": "node",
+      "prompt": "`useEffect` with a cleanup function and a dependency array",
+      "answer": "useEffect(() => {\n  const id = setInterval(tick, 1000);\n  return () => clearInterval(id);\n}, [tick]);"
+    }
+  ],
+  "log": []
+}

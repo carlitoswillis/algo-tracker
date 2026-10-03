@@ -27,6 +27,9 @@ import {
 import {
   parseSetText, formatSetText, entryForItem, problemForItem, setId, validateSets,
 } from "./lib/sets.js";
+import {
+  dueItems, carryForward, recordResult, history as recallHistory, RECALL_EMPTY, RECALL_SIDES,
+} from "./lib/recall.js";
 
 // The whole curriculum as one browsable list — every problem either source
 // knows, whether or not the scheduler has ever served it. Built once: the
@@ -187,7 +190,7 @@ export default function GrindTracker() {
   const [status, setStatus] = useState("loading");
   const [saving, setSaving] = useState(null); // null | "saving" | "saved" | { error }
   // The tab lives in the URL hash so a view can be linked to and reloaded.
-  const TABS = ["today", "sets", "techniques", "library", "log"];
+  const TABS = ["today", "sets", "recall", "techniques", "library", "log"];
   const [tab, setTabState] = useState(() => {
     const h = (typeof window !== "undefined" ? window.location.hash : "").replace(/^#/, "").split("/")[0];
     return TABS.includes(h) ? h : "today";
@@ -238,6 +241,46 @@ export default function GrindTracker() {
     const body = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
     setSets(Array.isArray(body.sets) ? body.sets : next);
+  }
+
+  // Recall: the lines you type from memory before a session. Its own file
+  // and its own fetch, like the sets; a day's verdicts go back as the whole
+  // file, and the log's revision check never sees them.
+  const [recall, setRecall] = useState(null); // null = loading
+  const [recallError, setRecallError] = useState(null);
+  const recallRef = useRef(RECALL_EMPTY);       // the latest data, for back-to-back verdicts
+  const recallWrites = useRef(Promise.resolve()); // PUTs land in the order they were clicked
+  const loadRecall = React.useCallback(() => {
+    fetch("/api/recall").then(async (r) => {
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+      const data = {
+        version: 1,
+        items: Array.isArray(body.items) ? body.items : [],
+        log: Array.isArray(body.log) ? body.log : [],
+      };
+      recallRef.current = data;
+      setRecall(data);
+      setRecallError(null);
+    }).catch((e) => { setRecall(RECALL_EMPTY); setRecallError(e.message); });
+  }, []);
+  useEffect(loadRecall, [loadRecall]);
+  // Optimistic: the drill advances on the click and the file follows it to
+  // the server. A failed write is said, not swallowed, and the next verdict
+  // carries the earlier one with it since the whole file goes each time.
+  function recordRecall(entry) {
+    const next = recordResult(recallRef.current, entry);
+    recallRef.current = next;
+    setRecall(next);
+    recallWrites.current = recallWrites.current.then(async () => {
+      const r = await fetch("/api/recall", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: next.items, log: next.log }),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+      setRecallError(null);
+    }).catch((e) => setRecallError(`Not saved: ${e.message}. The verdict is only on this screen.`));
   }
 
   const revRef = useRef(0);        // the revision this tab last read or wrote
@@ -435,7 +478,7 @@ export default function GrindTracker() {
   // The rep screen takes the whole viewport: while you are working a problem the
   // header, the nav and the rest of the session are noise.
   const [focused, setFocused] = useState(false);
-  useEffect(() => { if (tab !== "today" && tab !== "sets") setFocused(false); }, [tab]);
+  useEffect(() => { if (tab !== "today" && tab !== "sets" && tab !== "recall") setFocused(false); }, [tab]);
 
 
   const head = tab === "today"
@@ -443,6 +486,8 @@ export default function GrindTracker() {
     : tab === "sets"
     ? { title: (openSet && sets?.find((s) => s.id === openSet)?.name) || "Sets",
         meta: sets ? `${sets.length} ${plural(sets.length, "set")} on file` : null }
+    : tab === "recall"
+    ? { title: "Recall", meta: recall ? `${recall.items.length} ${plural(recall.items.length, "line")} on file` : null }
     : tab === "techniques"
     ? { title: "Moves", meta: `${startedCount} of ${catalogedCount} started` }
     : tab === "library"
@@ -517,6 +562,9 @@ export default function GrindTracker() {
             openId={openSet} setOpenId={setOpenSet}
             problems={problems} techs={techs} ready={ready} setFocused={setFocused}
             recordFresh={recordFresh} recordAttempt={recordAttempt} />
+        ) : tab === "recall" ? (
+          <RecallView data={recall} error={recallError} reload={loadRecall} record={recordRecall}
+            setFocused={setFocused} />
         ) : tab === "techniques" ? (
           <TechniquesView techs={techs} delays={delays} />
         ) : tab === "library" ? (
@@ -534,7 +582,7 @@ export default function GrindTracker() {
 
       {!focused && (
         <nav className="strip" aria-label="Sections">
-          {[["today", "Today"], ["sets", "Sets"], ["techniques", "Moves"]].map(([k, label]) => (
+          {[["today", "Today"], ["sets", "Sets"], ["recall", "Recall"], ["techniques", "Moves"]].map(([k, label]) => (
             <button key={k} className={`stripTab${tab === k ? " stripTabOn" : ""}`} onClick={() => setTab(k)}
               aria-current={tab === k ? "page" : undefined}>{label}</button>
           ))}
@@ -1578,6 +1626,329 @@ function SetEditor({ set, sets, onClose, onSave }) {
       {parsed.problems.map((m, i) => <p key={i} className="note">Skipped {m}.</p>)}
       {error && <p className="note mark">{error}</p>}
     </Sheet>
+  );
+}
+
+// ---------- Recall ----------
+// Lines you type from memory, reference closed, before the session: the fix
+// for knowing the move and not being able to produce the line. Judgment is
+// what Today trains; this is fingers. A line is due until it has been typed
+// clean on two separate days running, and a miss sends it back — the rules
+// are in lib/recall.js. Nothing here touches the log or the moves.
+const RECALL_SIDE_KEY = "grind-recall-side";
+const RECALL_MINUTES = 10;
+const RECALL_SIDE_LABEL = { python: "Python", node: "Node" };
+function readRecallSide() {
+  try {
+    const v = localStorage.getItem(RECALL_SIDE_KEY);
+    return RECALL_SIDES.includes(v) ? v : RECALL_SIDES[0];
+  } catch { return RECALL_SIDES[0]; }
+}
+
+// The local calendar day as YYYY-MM-DD: a line typed at ten to midnight
+// belongs to the day you typed it, not to UTC's.
+const localYmd = (ts = Date.now()) => {
+  const d = new Date(ts);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+const ymdNoon = (ymd) => new Date(`${ymd}T12:00:00`).getTime();
+const byId = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+const sideWord = (side) => RECALL_SIDE_LABEL[side] ?? side;
+
+// A prompt is prose with code in backticks; the code is set in the mono face.
+function Ticks({ text }) {
+  const parts = String(text ?? "").split("`");
+  return parts.map((s, i) => (i % 2 ? <code key={i} className="recallTick">{s}</code> : s));
+}
+
+export function RecallView({ data, error, reload, record, setFocused }) {
+  const [side, setSideState] = useState(readRecallSide);
+  const [drill, setDrill] = useState(null); // null | { n, items }
+  const today = localYmd();
+  const setSide = (s) => {
+    setSideState(s);
+    try { localStorage.setItem(RECALL_SIDE_KEY, s); } catch { /* preference only */ }
+  };
+  useEffect(() => { setFocused(!!drill); }, [drill, setFocused]);
+
+  const due = useMemo(() => (data ? dueItems(data, today, side) : []), [data, today, side]);
+  // The queue: due lines not yet typed today, in id order.
+  const queue = useMemo(() => due.filter((i) => !i.attemptedToday).sort(byId), [due]);
+  // Today's verdicts come off the log, not the due list: the second clean of
+  // a pair retires a line, and it should still count as done today.
+  const doneToday = useMemo(() => {
+    if (!data) return { clean: 0, miss: 0, misses: [] };
+    const mine = new Map(data.items.filter((i) => i.side === side).map((i) => [i.id, i]));
+    const latest = new Map();
+    for (const e of data.log) if (e.date === today && mine.has(e.id)) latest.set(e.id, e.result);
+    let clean = 0, miss = 0;
+    const misses = [];
+    for (const [id, result] of latest) {
+      if (result === "clean") clean += 1;
+      else { miss += 1; misses.push({ ...mine.get(id), lastResult: "miss", lastDate: today }); }
+    }
+    return { clean, miss, misses: misses.sort(byId) };
+  }, [data, today, side]);
+  // What earlier days left for today; today's own misses are listed above.
+  const carried = useMemo(
+    () => (data ? carryForward(data, side).filter((i) => i.missedOn < today).sort(byId) : []),
+    [data, side, today]);
+  const week = useMemo(() => {
+    if (!data) return [];
+    const mine = new Set(data.items.filter((i) => i.side === side).map((i) => i.id));
+    return recallHistory({ ...data, log: data.log.filter((e) => mine.has(e.id)) }, 7, today);
+  }, [data, side, today]);
+
+  const start = (items) => setDrill({ n: (drill?.n ?? 0) + 1, items });
+
+  if (drill) {
+    return (
+      <RecallDrill key={drill.n} items={drill.items} side={side} error={error}
+        onRecord={(id, result) => record({ date: localYmd(), id, result })}
+        onBack={() => setDrill(null)} />
+    );
+  }
+
+  const weekLabel = (ymd) => new Date(ymdNoon(ymd)).toLocaleDateString(undefined, { weekday: "narrow" });
+  const n = data?.items.filter((i) => i.side === side).length ?? 0;
+
+  return (
+    <div>
+      {error && (
+        <Notice title="Your lines could not be reached">
+          <p>{error}</p>
+          <div className="noticeActions"><button className="btn" onClick={reload}>Try again</button></div>
+        </Notice>
+      )}
+      <div className="dial" role="group" aria-label="Side">
+        <span className="dialLabel">Side</span>
+        {RECALL_SIDES.map((s) => (
+          <button key={s} onClick={() => setSide(s)}
+            className={`dialBtn${side === s ? " dialBtnOn" : ""}`}
+            aria-pressed={side === s}>{sideWord(s)}</button>
+        ))}
+      </div>
+      <p className="prose">
+        Lines you type from memory, reference closed, before the session. Ten minutes, one
+        line at a time: type it, reveal, and say whether it was clean. A line retires after
+        two clean days running; a miss brings it back.
+      </p>
+
+      {data == null ? (
+        <p className="note">Loading your lines.</p>
+      ) : n === 0 ? (
+        <p className="note">
+          No {sideWord(side)} lines on file. Put them in recall.json in the data folder; examples/recall.json shows the shape.
+        </p>
+      ) : (
+        <>
+          <Head count={queue.length}>
+            {queue.length === 0 ? "Nothing left today" : `${cap(numberWord(queue.length))} ${plural(queue.length, "line")} due`}
+          </Head>
+          <p className="note">
+            {queue.length === 0
+              ? `Every ${sideWord(side)} line that is due has been typed today.`
+              : `${cap(numberWord(due.length))} of ${numberWord(n)} ${sideWord(side)} ${plural(n, "line")} ${due.length === 1 ? "is" : "are"} still due${n > due.length ? `; ${numberWord(n - due.length)} ${n - due.length === 1 ? "has" : "have"} retired` : ""}.`}
+            {(doneToday.clean + doneToday.miss) > 0 && (
+              <> Done today: <span className="fig">{doneToday.clean}</span> clean, <span className="fig">{doneToday.miss}</span> {doneToday.miss === 1 ? "miss" : "misses"}.</>
+            )}
+          </p>
+          <div className="setActions">
+            <button className="btn btnStrong" disabled={!queue.length} onClick={() => start(queue)}>Start</button>
+            {doneToday.misses.length > 0 && (
+              <button className="btn" onClick={() => start(doneToday.misses)}>Redo a miss</button>
+            )}
+          </div>
+
+          {carried.length > 0 && (
+            <>
+              <Head count={carried.length}>Carried forward</Head>
+              <div className="recs">
+                {carried.map((i) => {
+                  const f = dayFig(ymdNoon(i.missedOn));
+                  return (
+                    <div key={i.id} className="rec">
+                      <span className="gutter"><Fig unit={f.month}>{f.day}</Fig></span>
+                      <span className="stack">
+                        <span className="recName"><Ticks text={i.prompt} /></span>
+                        <span className="meta">missed, comes back until it is typed clean twice</span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          <Head>Last seven days</Head>
+          <table className="recallWeek">
+            <thead>
+              <tr>
+                <th scope="row" />
+                {week.map((d) => (
+                  <th key={d.date} scope="col" className={d.date === today ? "on" : undefined}
+                    aria-label={d.date}>{weekLabel(d.date)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {["clean", "miss"].map((k) => (
+                <tr key={k}>
+                  <th scope="row">{k}</th>
+                  {week.map((d) => (
+                    <td key={d.date} className={`fig${d.date === today ? " on" : ""}`}>{d[k] || "·"}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </div>
+  );
+}
+
+// The drill: ten minutes on the clock, one line at a time, verdict by key.
+// The queue is fixed when the drill starts, so a verdict landing in the file
+// never reorders what is still to come.
+function RecallDrill({ items, side, error, onRecord, onBack }) {
+  const [idx, setIdx] = useState(0);
+  const [results, setResults] = useState([]); // [{ item, result }], in order
+  const [skipped, setSkipped] = useState(0);
+  const [start] = useState(() => Date.now());
+  const [now, setNow] = useState(start);
+  const item = items[idx] ?? null;
+  const left = RECALL_MINUTES * 60 - Math.floor((now - start) / 1000);
+  const over = left <= 0 || !item;
+
+  // Wall-clock, like the rep screen: a backgrounded tab must not stop the clock.
+  useEffect(() => {
+    if (over) return;
+    const tick = () => setNow(Date.now());
+    const t = setInterval(tick, 500);
+    document.addEventListener("visibilitychange", tick);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", tick); };
+  }, [over]);
+
+  function verdict(result) {
+    onRecord(item.id, result);
+    setResults((r) => [...r, { item, result }]);
+    setIdx((i) => i + 1);
+  }
+  const skip = () => { setSkipped((k) => k + 1); setIdx((i) => i + 1); };
+
+  if (over) {
+    const clean = results.filter((r) => r.result === "clean").length;
+    const misses = results.filter((r) => r.result === "miss").map((r) => r.item);
+    return (
+      <div className="rep">
+        <button className="back" onClick={onBack} aria-label="Back to recall"><Chevron dir="left" />Recall</button>
+        <h1 className="repName">{left <= 0 ? "Time" : "Done"}</h1>
+        <p className="repMeta">
+          <span className="fig">{results.length}</span> of {items.length} {plural(items.length, "line")} typed,
+          {" "}<span className="fig">{clean}</span> clean, <span className="fig">{misses.length}</span> missed
+          {skipped > 0 && <>, <span className="fig">{skipped}</span> skipped</>}.
+        </p>
+        {misses.length > 0 && (
+          <>
+            <Head count={misses.length}>Missed</Head>
+            <div className="recs">
+              {misses.map((i) => (
+                <div key={i.id} className="rec">
+                  <span className="gutter"><Fig>{i.id}</Fig></span>
+                  <span className="stack">
+                    <span className="recName"><Ticks text={i.prompt} /></span>
+                    <pre className="recallPre meta">{i.answer}</pre>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+        <p className="repSay">
+          {misses.length > 0
+            ? "A miss comes back tomorrow, and the day after, until it has been typed clean on two days running. Redo it now from the Recall page if the line is still warm."
+            : results.length > 0
+            ? "Every line typed clean. Each one needs a second clean day before it retires."
+            : "Nothing was typed."}
+        </p>
+        {error && <p className="note mark">{error}</p>}
+        <div className="repActions doneActions">
+          <button className="btn btnStrong" onClick={onBack}>Back</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rep">
+      <button className="back" onClick={onBack} aria-label="Back to recall"><Chevron dir="left" />Recall</button>
+      <p className="repBanner"><span className="fig">{clock(left)}</span> left of {numberWord(RECALL_MINUTES)} minutes</p>
+      <RecallCard key={item.id} item={item} position={idx} total={items.length} side={side}
+        onClean={() => verdict("clean")} onMiss={() => verdict("miss")} onSkip={skip} />
+      {error && <p className="note mark">{error}</p>}
+    </div>
+  );
+}
+
+// One line: the prompt, a blank editor, the reveal, the verdict. Enter in the
+// editor is a newline, because the line may be several; Cmd or Ctrl with
+// Enter reveals, and after the reveal 1 is clean and 2 is a miss.
+function RecallCard({ item, position, total, side, onClean, onMiss, onSkip }) {
+  const [typed, setTyped] = useState("");
+  const [revealed, setRevealed] = useState(false);
+  const area = useRef(null);
+  useEffect(() => { area.current?.focus(); }, []);
+  useEffect(() => {
+    if (!revealed) return;
+    const onKey = (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "1") { e.preventDefault(); onClean(); }
+      else if (e.key === "2") { e.preventDefault(); onMiss(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [revealed, onClean, onMiss]);
+
+  return (
+    <>
+      <h1 className="repName recallPrompt"><Ticks text={item.prompt} /></h1>
+      <p className="repMeta">
+        {sideWord(side).toLowerCase()}, line {position + 1} of {total}
+        {item.lastResult === "miss" && item.lastDate && <>, missed on {fmtDate(ymdNoon(item.lastDate))}</>}
+        {item.lastResult === "clean" && <>, clean once</>}
+        {!item.lastResult && <>, never typed</>}
+      </p>
+      <label className="field">
+        <span className="fieldLabel">
+          {revealed ? "What you typed" : "From memory. Cmd or Ctrl and Enter reveals the line."}
+        </span>
+        <textarea ref={area} className="line area recallArea" value={typed} readOnly={revealed}
+          spellCheck={false} autoComplete="off" autoCapitalize="off" autoCorrect="off"
+          onChange={(e) => setTyped(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); setRevealed(true); }
+          }} />
+      </label>
+      {revealed ? (
+        <>
+          <div className="field">
+            <span className="fieldLabel">The line</span>
+            <pre className="recallPre">{item.answer}</pre>
+          </div>
+          <div className="repActions doneActions">
+            <button className="btn btnStrong" onClick={onClean}>Clean<span className="fig recallKey">1</span></button>
+            <button className="btn" onClick={onMiss}>Miss<span className="fig recallKey">2</span></button>
+          </div>
+        </>
+      ) : (
+        <div className="repActions doneActions">
+          <button className="btn btnStrong" onClick={() => setRevealed(true)}>Reveal</button>
+          <button className="btn btnBare" onClick={onSkip}>Skip for now</button>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -2669,6 +3040,24 @@ a { color: var(--ink); }
 .setActions { display: flex; gap: 8px; flex-wrap: wrap; padding: 18px 16px 4px; }
 .setText { min-height: 170px; font-family: var(--mono); font-size: 13px; line-height: 1.55; }
 .repBanner { margin: 4px 16px 0; font-size: 13.5px; color: var(--ink-2); }
+
+/* ── Recall ─────────────────────────────────────────────────────────────── */
+.recallPrompt { font-size: 22px; }
+.recallTick { font-family: var(--mono); font-size: 0.92em; font-weight: 500; }
+.recallArea { min-height: 150px; font-family: var(--mono); font-size: 13.5px; line-height: 1.55;
+  tab-size: 4; }
+.recallArea[readonly] { color: var(--ink-2); border-bottom-color: var(--rule); }
+.recallPre { margin: 0; padding: 8px 0 0; font-family: var(--mono); font-size: 13.5px;
+  line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; color: var(--ink); }
+.recallPre.meta { color: var(--ink-3); font-size: 12.5px; padding-top: 4px; }
+.recallKey { margin-left: 8px; color: var(--ink-3); font-weight: 400; }
+.recallWeek { width: calc(100% - 32px); margin: 8px 16px 0; border-collapse: collapse; font-size: 13px; }
+.recallWeek th, .recallWeek td { text-align: right; padding: 6px 4px; font-weight: 400; }
+.recallWeek thead th { color: var(--ink-3); border-bottom: 1px solid var(--rule-ink); }
+.recallWeek td { border-bottom: 1px solid var(--rule); color: var(--ink-2); }
+.recallWeek tbody th { text-align: left; padding-left: 0; color: var(--ink-3);
+  border-bottom: 1px solid var(--rule); }
+.recallWeek .on { color: var(--ink); font-weight: 700; }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
