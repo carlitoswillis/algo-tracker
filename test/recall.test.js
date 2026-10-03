@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  RECALL_EMPTY, dueItems, carryForward, recordResult, history, isValidRecall,
+  RECALL_EMPTY, dueItems, carryForward, recordResult, history, isValidRecall, validateRecall,
 } from "../lib/recall.js";
 
 const item = (id, side = "python") => ({ id, side, prompt: `prompt ${id}`, answer: `answer ${id}` });
