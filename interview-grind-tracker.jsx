@@ -1860,6 +1860,7 @@ function RecallDrill({ items, side, error, onRecord, onBack }) {
                   <span className="stack">
                     <span className="recName"><Ticks text={i.prompt} /></span>
                     <pre className="recallPre meta">{i.answer}</pre>
+                    {i.note && <RecallNote text={i.note} className="meta" />}
                   </span>
                 </div>
               ))}
@@ -1895,6 +1896,21 @@ function RecallDrill({ items, side, error, onRecord, onBack }) {
 // One line: the prompt, a blank editor, the reveal, the verdict. Enter in the
 // editor is a newline, because the line may be several; Cmd or Ctrl with
 // Enter reveals, and after the reveal 1 is clean and 2 is a miss.
+// A note is plain text with paragraphs separated by blank lines. The last
+// paragraph usually starts "Say:" — the sentence to use out loud in the room —
+// and is set apart so the eye lands on it.
+function RecallNote({ text, className = "" }) {
+  const paras = String(text || "").split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  if (!paras.length) return null;
+  return (
+    <div className={`recallNote ${className}`.trim()}>
+      {paras.map((p, i) => (
+        <p key={i} className={/^say:/i.test(p) ? "recallSay" : undefined}>{p}</p>
+      ))}
+    </div>
+  );
+}
+
 function RecallCard({ item, position, total, side, onClean, onMiss, onSkip }) {
   const [typed, setTyped] = useState("");
   const [revealed, setRevealed] = useState(false);
@@ -1936,6 +1952,7 @@ function RecallCard({ item, position, total, side, onClean, onMiss, onSkip }) {
           <div className="field">
             <span className="fieldLabel">The line</span>
             <pre className="recallPre">{item.answer}</pre>
+            {item.note && <RecallNote text={item.note} />}
           </div>
           <div className="repActions doneActions">
             <button className="btn btnStrong" onClick={onClean}>Clean<span className="fig recallKey">1</span></button>
@@ -3050,6 +3067,11 @@ a { color: var(--ink); }
 .recallPre { margin: 0; padding: 8px 0 0; font-family: var(--mono); font-size: 13.5px;
   line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; color: var(--ink); }
 .recallPre.meta { color: var(--ink-3); font-size: 12.5px; padding-top: 4px; }
+.recallNote { margin: 10px 0 0; max-width: 64ch; font-size: 13.5px; line-height: 1.5; color: var(--ink-2); }
+.recallNote p { margin: 0 0 8px; }
+.recallNote p:last-child { margin-bottom: 0; }
+.recallNote .recallSay { color: var(--ink); border-left: 2px solid var(--rule-ink); padding-left: 10px; }
+.recallNote.meta { font-size: 12.5px; color: var(--ink-3); margin-top: 6px; }
 .recallKey { margin-left: 8px; color: var(--ink-3); font-weight: 400; }
 .recallWeek { width: calc(100% - 32px); margin: 8px 16px 0; border-collapse: collapse; font-size: 13px; }
 .recallWeek th, .recallWeek td { text-align: right; padding: 6px 4px; font-weight: 400; }

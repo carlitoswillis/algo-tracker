@@ -168,3 +168,10 @@ test("a second clean today retires the line out of dueItems, so done-today must 
   assert.deepEqual(today.map((e) => [e.id, e.result]), [["py-01", "clean"]]);
   assert.deepEqual(history(data, 1, "2026-10-03"), [{ date: "2026-10-03", clean: 1, miss: 0 }]);
 });
+
+test("an item may carry a note, and it must be text", () => {
+  const base = { id: "py-01", side: "python", prompt: "p", answer: "a" };
+  assert.equal(validateRecall({ version: 1, items: [{ ...base, note: "why it matters" }], log: [] }).ok, true);
+  assert.equal(validateRecall({ version: 1, items: [base], log: [] }).ok, true);
+  assert.equal(validateRecall({ version: 1, items: [{ ...base, note: 7 }], log: [] }).ok, false);
+});
